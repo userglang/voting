@@ -37,7 +37,7 @@ class MemberForm
                             ->placeholder('MBR-00001')
                             ->maxLength(50)
                             ->helperText('System-generated code (not editable)')
-                            ->disabled() // prevents user from editing
+                            ->readOnly()
                             ->default(fn () => 'MBR-' . str_pad(mt_rand(1, 99999), 5, '0', STR_PAD_LEFT)),
 
                         TextInput::make('cid')
@@ -194,7 +194,7 @@ class MemberForm
                             ->label('Share Amount')
                             ->options([
                                 '0' => 'Below 3,000',
-                                '1' => 'Equal 3,000 or Above',
+                                '1' => '3,000 and Above',
                             ])
                             ->placeholder('Select share amount range')
                             ->helperText('Choose the member’s share contribution range')

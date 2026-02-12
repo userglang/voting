@@ -18,8 +18,9 @@ return new class extends Migration
 
             $table->string('branch_number')->index()->comment('Reference to the associated branch');
 
-            $table->uuid('member_id')->nullable()->index()
-                ->comment('Member ID reference; nullable if the vote is not linked to a member');
+            // Change member_code column type to string (matching the members table)
+            $table->string('member_code')->nullable()->index()
+                ->comment('Member Code reference; nullable if the vote is not linked to a member');
 
             $table->uuid('candidate_id')->nullable()->index()
                 ->comment('Candidate ID reference; nullable if the vote is not linked to a candidate');
@@ -35,11 +36,12 @@ return new class extends Migration
                 ->onDelete('cascade')
                 ->comment('Cascade delete votes when the associated branch is deleted.');
 
-            $table->foreign('member_id')
-                ->references('id')
+            // Foreign key for member_code (now string, matching members.code type)
+            $table->foreign('member_code')
+                ->references('code')
                 ->on('members')
                 ->onDelete('set null') // Optionally set to null instead of cascade delete
-                ->comment('Set member_id to null if the associated member is deleted.');
+                ->comment('Set member_code to null if the associated member is deleted.');
 
             $table->foreign('candidate_id')
                 ->references('id')

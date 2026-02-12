@@ -8,6 +8,9 @@ use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
+use Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
 
 class CandidateForm
 {
@@ -70,17 +73,20 @@ class CandidateForm
                 Section::make('Profile Image')
                     ->description('Upload the candidate\'s profile image.')
                     ->schema([
-                        // Profile Image Upload
                         FileUpload::make('image')
                             ->label('Profile Image')
                             ->image()
-                            ->disk('public') // Store in the public disk
-                            ->directory('candidates/images') // Store in candidates/images folder
-                            ->maxSize(2048) // Max size 2MB for image
-                            ->acceptedFileTypes(['image/jpeg', 'image/png'])
-                            ->helperText('Upload a profile image (JPG, PNG only, max 2MB)')
-                            ->nullable()
-                            ->hint('Upload a clear image of the candidate'),
+                            ->disk('public')
+                            ->directory('candidates/images')
+                            ->maxSize(2048)
+                            ->imageEditor()
+                            ->afterStateHydrated(function ($component, $state) {
+                                if ($component && $state && !str_contains($state, '/')) {
+                                    $component->state('candidates/images/' . $state);
+                                }
+                            })
+                            ->dehydrateStateUsing(fn ($state) => $state ? basename($state) : null)
+                            ->helperText('Upload a JPEG or PNG image (max 2MB).'),
                     ]),
             ]);
     }

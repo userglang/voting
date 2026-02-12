@@ -33,7 +33,7 @@ class Vote extends Model
         'id',
         'control_number',
         'branch_number',
-        'member_id',
+        'member_code',
         'candidate_id',
         'online_vote',
     ];
@@ -58,12 +58,23 @@ class Vote extends Model
                 $vote->id = (string) Str::uuid();
             }
 
-            // Auto-generate the control_number if it's not provided
+            // Auto-generate or reuse the control_number
             if (is_null($vote->control_number)) {
-                // Find the max control_number for this branch and member combination
-                $vote->control_number = static::where('branch_number', $vote->branch_number)
-                    ->where('member_id', $vote->member_id)
-                    ->max('control_number') + 1;
+                // Check if this member already has a control number in this branch
+                $existingVote = static::where('branch_number', $vote->branch_number)
+                    ->where('member_code', $vote->member_code)
+                    ->first();
+
+                if ($existingVote) {
+                    // Reuse the existing control number
+                    $vote->control_number = $existingVote->control_number;
+                } else {
+                    // Generate a new control number (increment from max in this branch)
+                    $maxControlNumber = static::where('branch_number', $vote->branch_number)
+                        ->max('control_number') ?? 0;
+
+                    $vote->control_number = $maxControlNumber + 1;
+                }
             }
         });
     }
@@ -82,11 +93,44 @@ class Vote extends Model
 
     public function member()
     {
-        return $this->belongsTo(Member::class);
+        return $this->belongsTo(Member::class, 'member_code', 'code');
     }
 
     public function candidate()
     {
         return $this->belongsTo(Candidate::class);
+    }
+
+    public static function checkPositionVoteLimit(string $memberCode, string $branchNumber, string $positionId): array
+    {
+        $position = Position::find($positionId);
+
+        if (!$position) {
+            return [
+                'allowed' => false,
+                'message' => 'Position not found',
+                'current_votes' => 0,
+                'max_votes' => 0,
+            ];
+        }
+
+        $currentVotes = static::where('member_code', $memberCode)
+            ->where('branch_number', $branchNumber)
+            ->whereHas('candidate', function ($query) use ($positionId) {
+                $query->where('position_id', $positionId);
+            })
+            ->count();
+
+        $maxVotes = $position->vacant_count ?? 1;
+
+        return [
+            'allowed' => $currentVotes < $maxVotes,
+            'message' => $currentVotes >= $maxVotes
+                ? "Maximum votes ({$maxVotes}) reached for {$position->title}"
+                : "Can vote " . ($maxVotes - $currentVotes) . " more time(s) for {$position->title}",
+            'current_votes' => $currentVotes,
+            'max_votes' => $maxVotes,
+            'position_title' => $position->title,
+        ];
     }
 }

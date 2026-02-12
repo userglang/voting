@@ -8,8 +8,6 @@ use Illuminate\Support\Str;
 
 class Member extends Model
 {
-    //
-
     use HasFactory;
 
     // The table associated with the model.
@@ -23,6 +21,7 @@ class Member extends Model
 
     // Mass assignable attributes (for bulk insert, updates)
     protected $fillable = [
+        'id',
         'code',
         'cid',
         'branch_number',
@@ -70,22 +69,35 @@ class Member extends Model
         });
     }
 
-    // Defining the relationship with the Branch model (assuming you have a Branch model)
+    // Defining the relationship with the Branch model
     public function branch()
     {
         return $this->belongsTo(Branch::class, 'branch_number', 'branch_number');
     }
-
 
     /**
      * Accessor: Get full name.
      */
     public function getFullNameAttribute(): string
     {
-        return trim(implode(' ', array_filter([
-            $this->first_name,
+        // Build name parts array
+        $nameParts = array_filter([
             $this->last_name,
-        ])));
+            $this->first_name,
+            $this->middle_name,
+        ]);
+
+        // If we have last name and first name, use "Last, First Middle" format
+        if ($this->last_name && $this->first_name) {
+            return trim(
+                $this->last_name . ', ' .
+                $this->first_name .
+                ($this->middle_name ? ' ' . $this->middle_name : '')
+            );
+        }
+
+        // Otherwise just join available parts
+        return trim(implode(' ', $nameParts));
     }
 
     /**
@@ -103,5 +115,4 @@ class Member extends Model
     {
         return $this->birth_date?->age;
     }
-
 }
