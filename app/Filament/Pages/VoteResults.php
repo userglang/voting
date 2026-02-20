@@ -2,11 +2,10 @@
 
 namespace App\Filament\Pages;
 
-use App\Exports\MembersExport;
-use App\Exports\MembersSummaryExport;
 use App\Exports\VotesExport;
 use App\Exports\VotesSummaryExport;
 use App\Models\Branch;
+use App\Models\Candidate;
 use App\Models\Position;
 use App\Models\Vote;
 use BackedEnum;
@@ -20,29 +19,29 @@ use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Filament\Schemas\Components\Section;
 use Filament\Support\Assets\Js;
-use Filament\Support\Facades\FilamentAsset;
-use Maatwebsite\Excel\Facades\Excel;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
+use Maatwebsite\Excel\Facades\Excel;
 use UnitEnum;
 
 class VoteResults extends Page
 {
-    protected static string | BackedEnum | null $navigationIcon = Heroicon::QueueList;
+    protected static string|BackedEnum|null $navigationIcon = Heroicon::QueueList;
     protected static ?string $navigationLabel = 'Vote Results';
-    protected static ?string $title           = 'Candidate Vote Results';
-    protected static ?string $slug            = 'vote-results';
-    protected string  $view            = 'filament.pages.vote-results';
-
-    protected static string | UnitEnum | null $navigationGroup = 'Reports';
+    protected static ?string $title = 'Candidate Vote Results';
+    protected static ?string $slug = 'vote-results';
+    protected string $view = 'filament.pages.vote-results';
+    protected static string|UnitEnum|null $navigationGroup = 'Reports';
     protected static ?int $navigationSort = 2;
 
     public string $filterPosition = '';
-    public string $search         = '';
+    public string $search = '';
 
-    /**
-     * Register the external JS file so Livewire never touches it.
-     */
+    /** Cache TTL in seconds. */
+    protected int $cacheTtl = 300;
+
     public static function getAssets(): array
     {
         return [
@@ -50,14 +49,134 @@ class VoteResults extends Page
         ];
     }
 
+    // -------------------------------------------------------------------------
+    // Shared helpers
+    // -------------------------------------------------------------------------
 
+    /**
+     * Branch options — cached to avoid repeated queries across all four export forms.
+     */
+    protected function branchOptions(): array
+    {
+        return Cache::remember('branch_options_vote', $this->cacheTtl, fn () =>
+            Branch::orderBy('branch_name')->pluck('branch_name', 'branch_number')->toArray()
+        );
+    }
+
+    /**
+     * Position options — cached similarly.
+     */
+    protected function positionOptions(): array
+    {
+        return Cache::remember('position_options', $this->cacheTtl, fn () =>
+            Position::where('is_active', true)->orderBy('priority')->pluck('title', 'id')->toArray()
+        );
+    }
+
+    /**
+     * Apply standard vote filters to a query builder.
+     */
+    protected function applyVoteFilters(\Illuminate\Database\Eloquent\Builder $query, array $data): \Illuminate\Database\Eloquent\Builder
+    {
+        if (!empty($data['branch_number'])) {
+            $query->where('branch_number', $data['branch_number']);
+        }
+
+        match ($data['vote_type'] ?? 'all') {
+            'online'  => $query->where('online_vote', true),
+            'offline' => $query->where('online_vote', false),
+            default   => null,
+        };
+
+        if (!empty($data['date_from'])) {
+            $query->whereDate('created_at', '>=', $data['date_from']);
+        }
+
+        if (!empty($data['date_to'])) {
+            $query->whereDate('created_at', '<=', $data['date_to']);
+        }
+
+        return $query;
+    }
+
+    /**
+     * Resolve a human-readable branch name from branch_number without a DB hit
+     * (uses the already-cached options array).
+     */
+    protected function resolveBranchName(?string $branchNumber): string
+    {
+        if (empty($branchNumber)) {
+            return 'All Branches';
+        }
+
+        return $this->branchOptions()[$branchNumber] ?? 'Unknown Branch';
+    }
+
+    /**
+     * Build the filter labels array used in all PDF exports.
+     */
+    protected function buildFilterLabels(array $data): array
+    {
+        return [
+            'branch_name'     => $this->resolveBranchName($data['branch_number'] ?? null),
+            'vote_type_label' => match ($data['vote_type'] ?? 'all') {
+                'online'  => 'Online Votes Only',
+                'offline' => 'Offline Votes Only',
+                default   => 'All Vote Types',
+            },
+            'date_from' => $data['date_from'] ?? 'Beginning',
+            'date_to'   => $data['date_to'] ?? 'Present',
+        ];
+    }
+
+    /**
+     * Shared vote export form schema with optional position/date fields.
+     */
+    protected function voteExportSchema(bool $withPosition = false, bool $withDates = true): array
+    {
+        $fields = [
+            Select::make('branch_number')
+                ->label('Branch')
+                ->options($this->branchOptions())
+                ->searchable()
+                ->placeholder('All Branches'),
+
+            Radio::make('vote_type')
+                ->label('Vote Type')
+                ->options([
+                    'all'     => 'All Votes',
+                    'online'  => 'Online Votes Only',
+                    'offline' => 'Offline Votes Only',
+                ])
+                ->default('all')
+                ->inline(),
+        ];
+
+        if ($withPosition) {
+            $fields[] = Select::make('position_id')
+                ->label('Position')
+                ->options($this->positionOptions())
+                ->searchable()
+                ->placeholder('All Positions');
+        }
+
+        if ($withDates) {
+            $fields[] = DatePicker::make('date_from')->label('Date From')->native(false);
+            $fields[] = DatePicker::make('date_to')->label('Date To')->native(false);
+        }
+
+        return $fields;
+    }
+
+    // -------------------------------------------------------------------------
+    // Header actions / exports
+    // -------------------------------------------------------------------------
 
     protected function getHeaderActions(): array
     {
         return [
-
             ActionGroup::make([
-                // Export to Excel - Detailed
+
                 Action::make('voteExportExcel')
                     ->label('Export to Excel (Detailed)')
                     ->icon('heroicon-o-document-arrow-down')
@@ -65,57 +184,20 @@ class VoteResults extends Page
                     ->form([
                         Section::make('Export Filters')
                             ->description('Filter the data to export')
-                            ->schema([
-                                Select::make('branch_number')
-                                    ->label('Branch')
-                                    ->options(Branch::pluck('branch_name', 'branch_number'))
-                                    ->searchable()
-                                    ->placeholder('All Branches'),
-
-                                Radio::make('vote_type')
-                                    ->label('Vote Type')
-                                    ->options([
-                                        'all' => 'All Votes',
-                                        'online' => 'Online Votes Only',
-                                        'offline' => 'Offline Votes Only',
-                                    ])
-                                    ->default('all')
-                                    ->inline(),
-
-                                Select::make('position_id')
-                                    ->label('Position')
-                                    ->options(Position::pluck('title', 'id'))
-                                    ->searchable()
-                                    ->placeholder('All Positions'),
-
-                                DatePicker::make('date_from')
-                                    ->label('Date From')
-                                    ->native(false),
-
-                                DatePicker::make('date_to')
-                                    ->label('Date To')
-                                    ->native(false),
-                            ])
+                            ->schema($this->voteExportSchema(withPosition: true))
                             ->columns(2),
                     ])
                     ->action(function (array $data) {
                         try {
-                            $filename = 'votes-detailed-' . now()->format('Y-m-d-His') . '.xlsx';
-
                             return Excel::download(
                                 new VotesExport($data),
-                                $filename
+                                'votes-detailed-' . now()->format('Y-m-d-His') . '.xlsx'
                             );
                         } catch (\Exception $e) {
-                            Notification::make()
-                                ->title('Export Failed')
-                                ->body('Error: ' . $e->getMessage())
-                                ->danger()
-                                ->send();
+                            Notification::make()->title('Export Failed')->body('Error: ' . $e->getMessage())->danger()->send();
                         }
                     }),
 
-                // Export to Excel - Summary
                 Action::make('exportSummary')
                     ->label('Export to Excel (Summary)')
                     ->icon('heroicon-o-chart-bar')
@@ -123,43 +205,20 @@ class VoteResults extends Page
                     ->form([
                         Section::make('Export Filters')
                             ->description('Filter the summary data')
-                            ->schema([
-                                Select::make('branch_number')
-                                    ->label('Branch')
-                                    ->options(Branch::pluck('branch_name', 'branch_number'))
-                                    ->searchable()
-                                    ->placeholder('All Branches'),
-
-                                Radio::make('vote_type')
-                                    ->label('Vote Type')
-                                    ->options([
-                                        'all' => 'All Votes',
-                                        'online' => 'Online Votes Only',
-                                        'offline' => 'Offline Votes Only',
-                                    ])
-                                    ->default('all')
-                                    ->inline(),
-                            ])
+                            ->schema($this->voteExportSchema())
                             ->columns(2),
                     ])
                     ->action(function (array $data) {
                         try {
-                            $filename = 'votes-summary-' . now()->format('Y-m-d-His') . '.xlsx';
-
                             return Excel::download(
                                 new VotesSummaryExport($data),
-                                $filename
+                                'votes-summary-' . now()->format('Y-m-d-His') . '.xlsx'
                             );
                         } catch (\Exception $e) {
-                            Notification::make()
-                                ->title('Export Failed')
-                                ->body('Error: ' . $e->getMessage())
-                                ->danger()
-                                ->send();
+                            Notification::make()->title('Export Failed')->body('Error: ' . $e->getMessage())->danger()->send();
                         }
                     }),
 
-                // Export to PDF - Detailed
                 Action::make('exportPdf')
                     ->label('Export to PDF (Detailed)')
                     ->icon('heroicon-o-document-text')
@@ -167,110 +226,39 @@ class VoteResults extends Page
                     ->form([
                         Section::make('Export Filters')
                             ->description('Filter the data to export')
-                            ->schema([
-                                Select::make('branch_number')
-                                    ->label('Branch')
-                                    ->options(Branch::pluck('branch_name', 'branch_number'))
-                                    ->searchable()
-                                    ->placeholder('All Branches')
-                                    ->live(),
-
-                                Radio::make('vote_type')
-                                    ->label('Vote Type')
-                                    ->options([
-                                        'all' => 'All Votes',
-                                        'online' => 'Online Votes Only',
-                                        'offline' => 'Offline Votes Only',
-                                    ])
-                                    ->default('all')
-                                    ->inline(),
-
-                                Select::make('position_id')
-                                    ->label('Position')
-                                    ->options(Position::pluck('title', 'id'))
-                                    ->searchable()
-                                    ->placeholder('All Positions'),
-
-                                DatePicker::make('date_from')
-                                    ->label('Date From')
-                                    ->native(false),
-
-                                DatePicker::make('date_to')
-                                    ->label('Date To')
-                                    ->native(false),
-                            ])
+                            ->schema($this->voteExportSchema(withPosition: true))
                             ->columns(2),
                     ])
                     ->action(function (array $data) {
                         try {
                             $query = Vote::query()
                                 ->with(['member', 'candidate.position', 'branch'])
-                                ->orderBy('created_at', 'desc');
+                                ->orderByDesc('created_at');
 
-                            // Apply filters
-                            if (!empty($data['branch_number'])) {
-                                $query->where('branch_number', $data['branch_number']);
-                            }
-
-                            if (!empty($data['vote_type'])) {
-                                if ($data['vote_type'] === 'online') {
-                                    $query->where('online_vote', true);
-                                } elseif ($data['vote_type'] === 'offline') {
-                                    $query->where('online_vote', false);
-                                }
-                            }
+                            $this->applyVoteFilters($query, $data);
 
                             if (!empty($data['position_id'])) {
-                                $query->whereHas('candidate', function ($q) use ($data) {
-                                    $q->where('position_id', $data['position_id']);
-                                });
-                            }
-
-                            if (!empty($data['date_from'])) {
-                                $query->whereDate('created_at', '>=', $data['date_from']);
-                            }
-
-                            if (!empty($data['date_to'])) {
-                                $query->whereDate('created_at', '<=', $data['date_to']);
+                                $query->whereHas('candidate', fn ($q) =>
+                                    $q->where('position_id', $data['position_id'])
+                                );
                             }
 
                             $votes = $query->get();
 
-                            // Prepare filter labels for PDF
-                            $filters = [
-                                'branch_name' => !empty($data['branch_number'])
-                                    ? Branch::where('branch_number', $data['branch_number'])->first()?->branch_name
-                                    : 'All Branches',
-                                'vote_type_label' => match($data['vote_type'] ?? 'all') {
-                                    'online' => 'Online Votes Only',
-                                    'offline' => 'Offline Votes Only',
-                                    default => 'All Vote Types',
-                                },
-                                'date_from' => $data['date_from'] ?? 'Beginning',
-                                'date_to' => $data['date_to'] ?? 'Present',
-                            ];
-
                             $pdf = Pdf::loadView('pdf.votes-report', [
-                                'votes' => $votes,
-                                'filters' => $filters,
+                                'votes'   => $votes,
+                                'filters' => $this->buildFilterLabels($data),
                             ])->setPaper('a4', 'landscape');
 
-                            $filename = 'votes-report-' . now()->format('Y-m-d-His') . '.pdf';
-
-                            return response()->streamDownload(function () use ($pdf) {
-                                echo $pdf->output();
-                            }, $filename);
-
+                            return response()->streamDownload(
+                                fn () => print($pdf->output()),
+                                'votes-report-' . now()->format('Y-m-d-His') . '.pdf'
+                            );
                         } catch (\Exception $e) {
-                            Notification::make()
-                                ->title('Export Failed')
-                                ->body('Error: ' . $e->getMessage())
-                                ->danger()
-                                ->send();
+                            Notification::make()->title('Export Failed')->body('Error: ' . $e->getMessage())->danger()->send();
                         }
                     }),
 
-                // Export to PDF - Summary (NEW!)
                 Action::make('exportPdfSummary')
                     ->label('Export to PDF (Summary)')
                     ->icon('heroicon-o-chart-bar-square')
@@ -278,147 +266,96 @@ class VoteResults extends Page
                     ->form([
                         Section::make('Export Filters')
                             ->description('Filter the summary data')
-                            ->schema([
-                                Select::make('branch_number')
-                                    ->label('Branch')
-                                    ->options(Branch::pluck('branch_name', 'branch_number'))
-                                    ->searchable()
-                                    ->placeholder('All Branches'),
-
-                                Radio::make('vote_type')
-                                    ->label('Vote Type')
-                                    ->options([
-                                        'all' => 'All Votes',
-                                        'online' => 'Online Votes Only',
-                                        'offline' => 'Offline Votes Only',
-                                    ])
-                                    ->default('all')
-                                    ->inline(),
-
-                                DatePicker::make('date_from')
-                                    ->label('Date From')
-                                    ->native(false),
-
-                                DatePicker::make('date_to')
-                                    ->label('Date To')
-                                    ->native(false),
-                            ])
+                            ->schema($this->voteExportSchema())
                             ->columns(2),
                     ])
                     ->action(function (array $data) {
                         try {
-                            $query = Vote::query()
-                                ->with(['candidate.position', 'branch']);
+                            // Aggregate in SQL — avoids loading all votes into memory
+                            $voteAgg = $this->applyVoteFilters(
+                                Vote::query()
+                                    ->join('candidates', 'votes.candidate_id', '=', 'candidates.id')
+                                    ->join('positions', 'candidates.position_id', '=', 'positions.id')
+                                    ->select([
+                                        'positions.id as position_id',
+                                        'positions.title as position_title',
+                                        'positions.vacant_count',
+                                        'candidates.id as candidate_id',
+                                        DB::raw('candidates.first_name'),
+                                        DB::raw('candidates.last_name'),
+                                        DB::raw('COUNT(*) as total'),
+                                        DB::raw('SUM(CASE WHEN votes.online_vote = 1 THEN 1 ELSE 0 END) as online'),
+                                        DB::raw('SUM(CASE WHEN votes.online_vote = 0 THEN 1 ELSE 0 END) as offline'),
+                                    ])
+                                    ->groupBy(
+                                        'positions.id', 'positions.title', 'positions.vacant_count',
+                                        'candidates.id', 'candidates.first_name', 'candidates.last_name'
+                                    ),
+                                $data
+                            )->get();
 
-                            // Apply filters
-                            if (!empty($data['branch_number'])) {
-                                $query->where('branch_number', $data['branch_number']);
-                            }
+                            // Totals from the aggregate (no second query needed)
+                            $totalVotes        = $voteAgg->sum('total');
+                            $totalOnlineVotes  = $voteAgg->sum('online');
+                            $totalOfflineVotes = $voteAgg->sum('offline');
+                            $totalCandidates   = $voteAgg->unique('candidate_id')->count();
 
-                            if (!empty($data['vote_type'])) {
-                                if ($data['vote_type'] === 'online') {
-                                    $query->where('online_vote', true);
-                                } elseif ($data['vote_type'] === 'offline') {
-                                    $query->where('online_vote', false);
-                                }
-                            }
+                            // Group into positions → candidates structure
+                            $summary = $voteAgg
+                                ->groupBy('position_id')
+                                ->map(function (Collection $rows) {
+                                    $first             = $rows->first();
+                                    $totalPositionVotes = $rows->sum('total');
 
-                            if (!empty($data['date_from'])) {
-                                $query->whereDate('created_at', '>=', $data['date_from']);
-                            }
+                                    $candidates = $rows->map(fn ($row) => [
+                                        'name'       => trim("{$row->first_name} {$row->last_name}"),
+                                        'total'      => (int) $row->total,
+                                        'online'     => (int) $row->online,
+                                        'offline'    => (int) $row->offline,
+                                        'percentage' => $totalPositionVotes > 0
+                                            ? round(($row->total / $totalPositionVotes) * 100, 2)
+                                            : 0.0,
+                                    ])->sortByDesc('total')->values();
 
-                            if (!empty($data['date_to'])) {
-                                $query->whereDate('created_at', '<=', $data['date_to']);
-                            }
-
-                            $votes = $query->get();
-
-                            // Group by position
-                            $summary = $votes->groupBy(function ($vote) {
-                                return $vote->candidate->position->id;
-                            })->map(function ($positionVotes) {
-                                $position = $positionVotes->first()->candidate->position;
-                                $totalPositionVotes = $positionVotes->count();
-
-                                $candidates = $positionVotes->groupBy('candidate_id')
-                                    ->map(function ($candidateVotes) use ($totalPositionVotes) {
-                                        $candidate = $candidateVotes->first()->candidate;
-                                        $total = $candidateVotes->count();
-
-                                        return [
-                                            'name' => $candidate->full_name,
-                                            'total' => $total,
-                                            'online' => $candidateVotes->where('online_vote', true)->count(),
-                                            'offline' => $candidateVotes->where('online_vote', false)->count(),
-                                            'percentage' => $totalPositionVotes > 0
-                                                ? round(($total / $totalPositionVotes) * 100, 2)
-                                                : 0,
-                                        ];
-                                    })
-                                    ->sortByDesc('total')
-                                    ->values();
-
-                                return [
-                                    'position_title' => $position->title,
-                                    'vacant_count' => $position->vacant_count,
-                                    'total_votes' => $totalPositionVotes,
-                                    'candidates' => $candidates,
-                                ];
-                            })
-                            ->sortBy('position_title')
-                            ->values();
-
-                            // Calculate totals
-                            $totalVotes = $votes->count();
-                            $totalOnlineVotes = $votes->where('online_vote', true)->count();
-                            $totalOfflineVotes = $votes->where('online_vote', false)->count();
-                            $totalCandidates = $summary->sum(fn($pos) => $pos['candidates']->count());
-
-                            // Prepare filter labels
-                            $filters = [
-                                'branch_name' => !empty($data['branch_number'])
-                                    ? Branch::where('branch_number', $data['branch_number'])->first()?->branch_name
-                                    : 'All Branches',
-                                'vote_type_label' => match($data['vote_type'] ?? 'all') {
-                                    'online' => 'Online Votes Only',
-                                    'offline' => 'Offline Votes Only',
-                                    default => 'All Vote Types',
-                                },
-                                'date_from' => $data['date_from'] ?? 'Beginning',
-                                'date_to' => $data['date_to'] ?? 'Present',
-                            ];
+                                    return [
+                                        'position_title' => $first->position_title,
+                                        'vacant_count'   => $first->vacant_count,
+                                        'total_votes'    => $totalPositionVotes,
+                                        'candidates'     => $candidates,
+                                    ];
+                                })
+                                ->sortBy('position_title')
+                                ->values();
 
                             $pdf = Pdf::loadView('pdf.votes-summary', [
-                                'summary' => $summary,
-                                'filters' => $filters,
-                                'totalVotes' => $totalVotes,
-                                'totalOnlineVotes' => $totalOnlineVotes,
+                                'summary'           => $summary,
+                                'filters'           => $this->buildFilterLabels($data),
+                                'totalVotes'        => $totalVotes,
+                                'totalOnlineVotes'  => $totalOnlineVotes,
                                 'totalOfflineVotes' => $totalOfflineVotes,
-                                'totalCandidates' => $totalCandidates,
+                                'totalCandidates'   => $totalCandidates,
                             ])->setPaper('a4', 'portrait');
 
-                            $filename = 'votes-summary-' . now()->format('Y-m-d-His') . '.pdf';
-
-                            return response()->streamDownload(function () use ($pdf) {
-                                echo $pdf->output();
-                            }, $filename);
-
+                            return response()->streamDownload(
+                                fn () => print($pdf->output()),
+                                'votes-summary-' . now()->format('Y-m-d-His') . '.pdf'
+                            );
                         } catch (\Exception $e) {
-                            Notification::make()
-                                ->title('Export Failed')
-                                ->body('Error: ' . $e->getMessage())
-                                ->danger()
-                                ->send();
+                            Notification::make()->title('Export Failed')->body('Error: ' . $e->getMessage())->danger()->send();
                         }
                     }),
+
             ])
                 ->label('Vote Export Reports')
                 ->icon('heroicon-o-arrow-down-tray')
                 ->color('primary')
                 ->button(),
-
         ];
     }
+
+    // -------------------------------------------------------------------------
+    // Live results
+    // -------------------------------------------------------------------------
 
     public function getPositionsProperty(): Collection
     {
@@ -427,38 +364,72 @@ class VoteResults extends Page
             ->get(['id', 'title']);
     }
 
+    /**
+     * Load results with a single DB round-trip per position set.
+     *
+     * Original issue: for each candidate, two separate Vote::where() queries
+     * were fired to get online/offline counts — O(candidates) extra queries.
+     *
+     * Fix: eager-load votes and aggregate counts in one go using withCount
+     * scoped constraints + a single aggregate query for online/offline splits.
+     */
     public function getResultsProperty(): Collection
     {
-        return Position::query()
+        // Step 1: Fetch positions with candidates and their total vote counts.
+        $positions = Position::query()
             ->where('is_active', true)
             ->when($this->filterPosition, fn ($q) => $q->where('id', $this->filterPosition))
             ->orderBy('priority')
             ->with(['candidates' => function ($q) {
                 $q->withCount('votes')
-                  ->when($this->search, fn ($q) =>
-                      $q->where(fn ($q) =>
-                          $q->where('first_name',  'like', "%{$this->search}%")
-                            ->orWhere('last_name',  'like', "%{$this->search}%")
-                            ->orWhere('middle_name','like', "%{$this->search}%")
-                      )
-                  )
-                  ->orderByDesc('votes_count');
+                    ->when($this->search, fn ($q) =>
+                        $q->where(fn ($inner) =>
+                            $inner->where('first_name',   'like', "%{$this->search}%")
+                                  ->orWhere('last_name',  'like', "%{$this->search}%")
+                                  ->orWhere('middle_name','like', "%{$this->search}%")
+                        )
+                    )
+                    ->orderByDesc('votes_count');
             }])
+            ->get();
+
+        // Step 2: Collect all candidate IDs from the result set.
+        $candidateIds = $positions
+            ->flatMap(fn ($p) => $p->candidates->pluck('id'))
+            ->unique()
+            ->values()
+            ->all();
+
+        // Step 3: Single query — online/offline vote counts for all candidates.
+        $voteSplits = Vote::whereIn('candidate_id', $candidateIds)
+            ->select([
+                'candidate_id',
+                DB::raw('SUM(CASE WHEN online_vote = 1 THEN 1 ELSE 0 END) as online_votes'),
+                DB::raw('SUM(CASE WHEN online_vote = 0 THEN 1 ELSE 0 END) as onsite_votes'),
+            ])
+            ->groupBy('candidate_id')
             ->get()
-            ->map(fn (Position $position) => [
-                'id'          => $position->id,
-                'title'       => $position->title,
-                'slots'       => $position->vacant_count ?? 1,
-                'total_votes' => $position->candidates->sum('votes_count'),
-                'candidates'  => $position->candidates->map(fn ($c) => [
+            ->keyBy('candidate_id');
+
+        // Step 4: Map into the view structure using already-loaded data.
+        return $positions->map(fn (Position $position) => [
+            'id'          => $position->id,
+            'title'       => $position->title,
+            'slots'       => $position->vacant_count ?? 1,
+            'total_votes' => $position->candidates->sum('votes_count'),
+            'candidates'  => $position->candidates->map(function ($c) use ($voteSplits) {
+                $split = $voteSplits->get($c->id);
+
+                return [
                     'full_name'    => $c->full_name,
                     'total_votes'  => $c->votes_count,
-                    'online_votes' => Vote::where('candidate_id', $c->id)->where('online_vote', true)->count(),
-                    'onsite_votes' => Vote::where('candidate_id', $c->id)->where('online_vote', false)->count(),
+                    'online_votes' => $split ? (int) $split->online_votes : 0,
+                    'onsite_votes' => $split ? (int) $split->onsite_votes : 0,
                     'image_url'    => $c->profile_image_url,
                     'initials'     => strtoupper(substr($c->first_name, 0, 1) . substr($c->last_name, 0, 1)),
-                ])->values(),
-            ]);
+                ];
+            })->values(),
+        ]);
     }
 
     protected function getViewData(): array
@@ -468,7 +439,4 @@ class VoteResults extends Page
             'results'   => $this->getResultsProperty(),
         ];
     }
-
-    public function updatedFilterPosition(): void {}
-    public function updatedSearch(): void {}
 }

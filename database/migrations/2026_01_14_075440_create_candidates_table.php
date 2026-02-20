@@ -22,7 +22,7 @@ return new class extends Migration
             $table->string('last_name')->comment('Last name of the candidate');
             $table->string('middle_name')->nullable()->comment('Middle name of the candidate');
 
-            $table->string('background_profile')
+            $table->text('background_profile')
                 ->nullable()
                 ->comment('Brief candidate profile background.');
 

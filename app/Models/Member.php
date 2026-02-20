@@ -21,7 +21,6 @@ class Member extends Model
 
     // Mass assignable attributes (for bulk insert, updates)
     protected $fillable = [
-        'id',
         'code',
         'cid',
         'branch_number',

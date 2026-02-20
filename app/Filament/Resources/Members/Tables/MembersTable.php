@@ -98,7 +98,7 @@ class MembersTable
                     ->label('MIGS')
                     ->formatStateUsing(fn ($state) => strtoupper($state ? 'MIGS' : 'Non-MIGS'))
                     ->color(fn ($state) => $state ? 'success' : 'warning')
-                    ->description(fn ($state) => $state ? 'P3,000.00 & Above' : 'Below P3,000.00')
+                    ->description(fn ($record) => $record->share_amount ? 'P3,000.00 & Above' : 'Below P3,000.00')
                     ->alignCenter()
                     ->toggleable(),
 

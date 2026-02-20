@@ -2,16 +2,15 @@
 
 namespace App\Filament\Pages;
 
-use App\Models\Member;
 use App\Models\Position;
 use App\Models\Vote;
-use Filament\Pages\Page;
 use BackedEnum;
-use Filament\Support\Icons\Heroicon;
 use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
 use Filament\Notifications\Notification;
-use Illuminate\Support\Facades\Auth;
+use Filament\Pages\Page;
+use Filament\Support\Icons\Heroicon;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use UnitEnum;
 
@@ -19,260 +18,156 @@ class VotingPage extends Page implements HasForms
 {
     use InteractsWithForms;
 
-    protected static string | BackedEnum | null $navigationIcon = Heroicon::OutlinedCursorArrowRays;
+    protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedCursorArrowRays;
     protected static ?string $navigationLabel = 'Voting';
     protected string $view = 'filament.pages.voting-page';
-
-
-    protected static string | UnitEnum | null $navigationGroup = 'Page';
+    protected static string|UnitEnum|null $navigationGroup = 'Page';
     protected static ?int $navigationSort = 1;
 
-    public $positions = [];
-    public $selectedVotes = [];
-    public $currentMember = null;
-    public $hasAlreadyVoted = false;
-    public $previousVotes = [];
-    public $isEligibleToVote = false;
-    public $ineligibilityReason = '';
-    public $controlNumber = null;
+    // -------------------------------------------------------------------------
+    // TEST MODE — hardcoded voter identity. No Member/Auth/User lookup at all.
+    // When going to production, replace these constants and restore real auth.
+    // -------------------------------------------------------------------------
+    private const TEST_MEMBER_CODE   = 'TEST-001';
+    private const TEST_BRANCH_NUMBER = 'BR-001';
+
+    public array  $positions           = [];
+    public array  $selectedVotes       = [];
+    public array  $previousVotes       = [];
+    public bool   $hasAlreadyVoted     = false;
+    public bool   $isEligibleToVote    = true;
+    public string $ineligibilityReason = '';
+    public ?int   $controlNumber       = null;
+
+    // Displayed in the view — no DB hit needed.
+    public array $memberInfo = [
+        'name'         => 'Test Voter',
+        'code'         => self::TEST_MEMBER_CODE,
+        'branch'       => 'Test Branch',
+        'is_migs'      => true,
+        'share_amount' => 1000,
+        'process_type' => 'Updating and Voting',
+    ];
+
+    // -------------------------------------------------------------------------
+    // Boot
+    // -------------------------------------------------------------------------
 
     public function mount(): void
     {
-        // Get current user
-        $user = Auth::user();
+        $this->loadVotingState();
+    }
 
-        // Get member record (update this logic based on how you link users to members)
-        // For now, using a sample member - you should update this based on your user-member relationship
-        $member = Member::where('is_active', true)
-            ->where('is_registered', true)
-            ->first();
+    // -------------------------------------------------------------------------
+    // State loading
+    // -------------------------------------------------------------------------
 
-        if (!$member) {
-            $this->isEligibleToVote = false;
-            $this->ineligibilityReason = 'Member record not found. Please contact administrator.';
-            return;
-        }
-
-        $this->currentMember = $member;
-
-        // Check member eligibility to vote
-        $eligibilityCheck = $this->checkMemberEligibility($member);
-
-        if (!$eligibilityCheck['eligible']) {
-            $this->isEligibleToVote = false;
-            $this->ineligibilityReason = $eligibilityCheck['reason'];
-            return;
-        }
-
-        $this->isEligibleToVote = true;
-
-        // Check if member has already voted
-        $existingVotes = Vote::where('member_code', $member->code)
-            ->where('branch_number', $member->branch_number)
-            ->with('candidate.position')
+    protected function loadVotingState(): void
+    {
+        $existingVotes = Vote::where('member_code', self::TEST_MEMBER_CODE)
+            ->where('branch_number', self::TEST_BRANCH_NUMBER)
+            ->with(['candidate.position'])
             ->get();
 
         if ($existingVotes->isNotEmpty()) {
             $this->hasAlreadyVoted = true;
-
-            // Get the control number (all votes should have the same control number)
-            $this->controlNumber = $existingVotes->first()->control_number;
-
-            // Group votes by position
-            $this->previousVotes = $existingVotes->groupBy(function($vote) {
-                return $vote->candidate->position_id;
-            })->map(function($votes) {
-                return $votes->map(function($vote) {
-                    return [
-                        'candidate_id' => $vote->candidate_id,
-                        'candidate_name' => $vote->candidate->full_name,
-                        'candidate_image' => $vote->candidate->profile_image_url,
-                        'candidate_background' => $vote->candidate->background_profile,
-                        'position_title' => $vote->candidate->position->title,
-                    ];
-                })->toArray();
-            })->toArray();
-
-            // Load only the positions and candidates that were voted for
-            $votedPositionIds = $existingVotes->pluck('candidate.position_id')->unique();
-
-            $this->positions = Position::query()
-                ->whereIn('id', $votedPositionIds)
-                ->orderBy('priority')
-                ->with(['candidates' => function ($query) use ($existingVotes) {
-                    $votedCandidateIds = $existingVotes->pluck('candidate_id');
-                    $query->whereIn('id', $votedCandidateIds)
-                          ->orderBy('last_name');
-                }])
-                ->get()
-                ->map(function ($position) {
-                    return [
-                        'id' => $position->id,
-                        'title' => $position->title,
-                        'vacant_count' => $position->vacant_count,
-                        'priority' => $position->priority,
-                        'candidates' => $position->candidates->map(function ($candidate) {
-                            return [
-                                'id' => $candidate->id,
-                                'full_name' => $candidate->full_name,
-                                'background_profile' => $candidate->background_profile,
-                                'profile_image_url' => $candidate->profile_image_url,
-                            ];
-                        })->toArray(),
-                    ];
-                })
-                ->toArray();
-
+            $this->controlNumber   = $existingVotes->first()->control_number;
+            $this->buildPreviousVotes($existingVotes);
+            $this->loadVotedPositions($existingVotes);
             return;
         }
 
-        // If not voted yet, load all active positions with their candidates
-        $this->positions = Position::query()
-            ->where('is_active', true)
-            ->orderBy('priority')
-            ->with(['candidates' => function ($query) {
-                $query->orderBy('last_name');
-            }])
-            ->get()
-            ->map(function ($position) {
-                return [
-                    'id' => $position->id,
-                    'title' => $position->title,
-                    'vacant_count' => $position->vacant_count,
-                    'priority' => $position->priority,
-                    'candidates' => $position->candidates->map(function ($candidate) {
-                        return [
-                            'id' => $candidate->id,
-                            'full_name' => $candidate->full_name,
-                            'background_profile' => $candidate->background_profile,
-                            'profile_image_url' => $candidate->profile_image_url,
-                        ];
-                    })->toArray(),
-                ];
-            })
-            ->toArray();
-
-        // Initialize selected votes array
-        foreach ($this->positions as $position) {
-            $this->selectedVotes[$position['id']] = [];
-        }
+        $this->hasAlreadyVoted = false;
+        $this->loadBallot();
     }
 
-    /**
-     * Check if member is eligible to vote based on business rules
-     */
-    protected function checkMemberEligibility(Member $member): array
+    protected function buildPreviousVotes(\Illuminate\Support\Collection $existingVotes): void
     {
-        // Rule 1: Member must be MIGS (is_migs = true)
-        if (!$member->is_migs) {
-            return [
-                'eligible' => false,
-                'reason' => 'You are not a MIGS member. Only MIGS members are eligible to vote.',
-            ];
-        }
+        $this->previousVotes = $existingVotes
+            ->groupBy(fn ($vote) => $vote->candidate->position_id)
+            ->map(fn ($votes) =>
+                $votes->map(fn ($vote) => [
+                    'candidate_id'         => $vote->candidate_id,
+                    'candidate_name'       => $vote->candidate->full_name,
+                    'candidate_image'      => $vote->candidate->profile_image_url,
+                    'candidate_background' => $vote->candidate->background_profile,
+                    'position_title'       => $vote->candidate->position->title,
+                ])->toArray()
+            )
+            ->toArray();
+    }
 
-        // Rule 2: Member share_amount must be greater than 0
-        if ($member->share_amount <= 0) {
-            return [
-                'eligible' => false,
-                'reason' => 'Your share amount is zero. Members must have share contributions to vote.',
-            ];
-        }
+    protected function loadVotedPositions(\Illuminate\Support\Collection $existingVotes): void
+    {
+        $votedPositionIds  = $existingVotes->pluck('candidate.position_id')->unique();
+        $votedCandidateIds = $existingVotes->pluck('candidate_id')->unique();
 
-        // Rule 3: Process type must be "Updating and Voting"
-        if ($member->process_type !== 'Updating and Voting') {
-            return [
-                'eligible' => false,
-                'reason' => 'Your process type is "' . ($member->process_type ?? 'Not Set') . '". Only members with "Updating and Voting" process type can vote.',
-            ];
-        }
+        $this->positions = Position::query()
+            ->whereIn('id', $votedPositionIds)
+            ->orderBy('priority')
+            ->with(['candidates' => fn ($q) =>
+                $q->whereIn('id', $votedCandidateIds)->orderBy('last_name')
+            ])
+            ->get()
+            ->map(fn ($p) => $this->mapPosition($p))
+            ->toArray();
+    }
 
-        // Rule 4: Member must be active
-        if (!$member->is_active) {
-            return [
-                'eligible' => false,
-                'reason' => 'Your membership is inactive. Please contact administrator.',
-            ];
-        }
+    protected function loadBallot(): void
+    {
+        $positions = Position::query()
+            ->where('is_active', true)
+            ->orderBy('priority')
+            ->with(['candidates' => fn ($q) => $q->orderBy('last_name')])
+            ->get();
 
-        // Rule 5: Member must be registered
-        if (!$member->is_registered) {
-            return [
-                'eligible' => false,
-                'reason' => 'You are not registered. Please complete registration first.',
-            ];
-        }
+        $this->positions     = $positions->map(fn ($p) => $this->mapPosition($p))->toArray();
+        $this->selectedVotes = collect($this->positions)
+            ->pluck('id')
+            ->mapWithKeys(fn ($id) => [$id => []])
+            ->toArray();
+    }
 
-        // All checks passed
+    protected function mapPosition(Position $position): array
+    {
         return [
-            'eligible' => true,
-            'reason' => '',
+            'id'           => $position->id,
+            'title'        => $position->title,
+            'vacant_count' => $position->vacant_count,
+            'priority'     => $position->priority,
+            'candidates'   => $position->candidates->map(fn ($c) => [
+                'id'                 => $c->id,
+                'full_name'          => $c->full_name,
+                'background_profile' => $c->background_profile,
+                'profile_image_url'  => $c->profile_image_url,
+            ])->toArray(),
         ];
     }
 
-    public function getHeading(): string
-    {
-        if (!$this->isEligibleToVote) {
-            return 'Voting Not Available';
-        }
-
-        if ($this->hasAlreadyVoted) {
-            return 'Your Votes';
-        }
-
-        return 'Cast Your Vote';
-    }
-
-    public function getSubheading(): ?string
-    {
-        if (!$this->isEligibleToVote) {
-            return null;
-        }
-
-        if ($this->hasAlreadyVoted) {
-            return 'Thank you for participating in the election';
-        }
-
-        return 'Select your preferred candidates for each position';
-    }
+    // -------------------------------------------------------------------------
+    // Livewire actions
+    // -------------------------------------------------------------------------
 
     public function toggleVote(string $positionId, string $candidateId): void
     {
-        if (!$this->isEligibleToVote) {
-            Notification::make()
-                ->danger()
-                ->title('Not Eligible')
-                ->body($this->ineligibilityReason)
-                ->send();
-            return;
-        }
-
         if ($this->hasAlreadyVoted) {
-            Notification::make()
-                ->warning()
-                ->title('Already Voted')
-                ->body('You have already cast your vote.')
-                ->send();
+            Notification::make()->warning()->title('Already Voted')->body('You have already cast your vote.')->send();
             return;
         }
 
         $position = collect($this->positions)->firstWhere('id', $positionId);
-
-        if (!$position) {
+        if (! $position) {
             return;
         }
 
-        $vacantCount = $position['vacant_count'];
+        $vacantCount  = $position['vacant_count'];
         $currentVotes = $this->selectedVotes[$positionId] ?? [];
 
-        // Check if candidate is already selected
         if (in_array($candidateId, $currentVotes)) {
-            // Remove the vote
             $this->selectedVotes[$positionId] = array_values(
-                array_filter($currentVotes, fn($id) => $id !== $candidateId)
+                array_filter($currentVotes, fn ($id) => $id !== $candidateId)
             );
         } else {
-            // Check if we've reached the limit
             if (count($currentVotes) >= $vacantCount) {
                 Notification::make()
                     ->warning()
@@ -281,11 +176,85 @@ class VotingPage extends Page implements HasForms
                     ->send();
                 return;
             }
-
-            // Add the vote
             $this->selectedVotes[$positionId][] = $candidateId;
         }
     }
+
+    public function submitVotes(): void
+    {
+        if ($this->hasAlreadyVoted) {
+            Notification::make()->warning()->title('Already Voted')->body('You have already cast your vote.')->send();
+            return;
+        }
+
+        if ($this->getTotalSelectedVotes() === 0) {
+            Notification::make()->warning()->title('No Votes Selected')->body('Please select at least one candidate before submitting.')->send();
+            return;
+        }
+
+        try {
+            DB::transaction(function () {
+                $alreadyVoted = Vote::where('member_code', self::TEST_MEMBER_CODE)
+                    ->where('branch_number', self::TEST_BRANCH_NUMBER)
+                    ->lockForUpdate()
+                    ->exists();
+
+                if ($alreadyVoted) {
+                    $this->hasAlreadyVoted = true;
+                    throw new \RuntimeException('duplicate_vote');
+                }
+
+                $controlNumber = (Vote::where('branch_number', self::TEST_BRANCH_NUMBER)
+                    ->lockForUpdate()
+                    ->max('control_number') ?? 0) + 1;
+
+                $now  = now();
+                $rows = [];
+
+                foreach ($this->selectedVotes as $positionId => $candidateIds) {
+                    foreach ($candidateIds as $candidateId) {
+                        $rows[] = [
+                            'control_number' => $controlNumber,
+                            'branch_number'  => self::TEST_BRANCH_NUMBER,
+                            'member_code'    => self::TEST_MEMBER_CODE,
+                            'candidate_id'   => $candidateId,
+                            'online_vote'    => true,
+                            'created_at'     => $now,
+                            'updated_at'     => $now,
+                        ];
+                    }
+                }
+
+                Vote::insert($rows);
+
+                $this->controlNumber   = $controlNumber;
+                $this->hasAlreadyVoted = true;
+            });
+
+            Notification::make()
+                ->success()
+                ->title('Vote Submitted')
+                ->body('Test vote recorded. Control Number: ' . $this->controlNumber)
+                ->send();
+
+            $this->loadVotingState();
+
+        } catch (\RuntimeException $e) {
+            if ($e->getMessage() === 'duplicate_vote') {
+                Notification::make()->warning()->title('Already Voted')->body('This test voter already has a recorded vote.')->send();
+            } else {
+                Log::error('VotingPage::submitVotes', ['error' => $e->getMessage()]);
+                Notification::make()->danger()->title('Error')->body('Failed to submit. Please try again.')->send();
+            }
+        } catch (\Exception $e) {
+            Log::error('VotingPage::submitVotes', ['error' => $e->getMessage()]);
+            Notification::make()->danger()->title('Error')->body('Failed to submit. Please try again.')->send();
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // View helpers
+    // -------------------------------------------------------------------------
 
     public function isSelected(string $positionId, string $candidateId): bool
     {
@@ -300,106 +269,7 @@ class VotingPage extends Page implements HasForms
     public function canVoteMore(string $positionId): bool
     {
         $position = collect($this->positions)->firstWhere('id', $positionId);
-        if (!$position) {
-            return false;
-        }
-
-        return $this->getVoteCount($positionId) < $position['vacant_count'];
-    }
-
-    public function submitVotes(): void
-    {
-        // Check eligibility again
-        if (!$this->isEligibleToVote) {
-            Notification::make()
-                ->danger()
-                ->title('Not Eligible')
-                ->body($this->ineligibilityReason)
-                ->send();
-            return;
-        }
-
-        // Check if already voted
-        if ($this->hasAlreadyVoted) {
-            Notification::make()
-                ->warning()
-                ->title('Already Voted')
-                ->body('You have already cast your vote.')
-                ->send();
-            return;
-        }
-
-        // Validate that user has voted for at least one position
-        if ($this->getTotalSelectedVotes() === 0) {
-            Notification::make()
-                ->warning()
-                ->title('No Votes Selected')
-                ->body('Please select at least one candidate before submitting.')
-                ->send();
-            return;
-        }
-
-        // Get member
-        $member = $this->currentMember;
-
-        if (!$member) {
-            Notification::make()
-                ->danger()
-                ->title('Member Not Found')
-                ->body('Unable to find your member record.')
-                ->send();
-            return;
-        }
-
-        // Double-check eligibility before saving
-        $eligibilityCheck = $this->checkMemberEligibility($member);
-        if (!$eligibilityCheck['eligible']) {
-            Notification::make()
-                ->danger()
-                ->title('Not Eligible')
-                ->body($eligibilityCheck['reason'])
-                ->send();
-            return;
-        }
-
-        try {
-            // Generate ONE control number for this member's voting session
-            // Get the next control number for this branch and member
-            $lastControlNumber = Vote::where('branch_number', $member->branch_number)
-                ->where('member_code', $member->code)
-                ->max('control_number');
-
-            $controlNumber = ($lastControlNumber ?? 0) + 1;
-
-            // Save all votes with the SAME control number
-            foreach ($this->selectedVotes as $positionId => $candidateIds) {
-                foreach ($candidateIds as $candidateId) {
-                    Vote::create([
-                        'control_number' => $controlNumber,
-                        'branch_number' => $member->branch_number,
-                        'member_code' => $member->code,
-                        'candidate_id' => $candidateId,
-                        'online_vote' => true,
-                    ]);
-                }
-            }
-
-            Notification::make()
-                ->success()
-                ->title('Vote Submitted')
-                ->body('Thank you! Your vote has been recorded successfully. Control Number: ' . $controlNumber)
-                ->send();
-
-            // Reload the page to show voted candidates
-            $this->mount();
-
-        } catch (\Exception $e) {
-            Notification::make()
-                ->danger()
-                ->title('Error')
-                ->body('Failed to submit your vote. Please try again.')
-                ->send();
-        }
+        return $position && $this->getVoteCount($positionId) < $position['vacant_count'];
     }
 
     public function getTotalSelectedVotes(): int
@@ -414,17 +284,18 @@ class VotingPage extends Page implements HasForms
 
     public function getMemberInfo(): array
     {
-        if (!$this->currentMember) {
-            return [];
-        }
+        return $this->memberInfo;
+    }
 
-        return [
-            'name' => $this->currentMember->full_name,
-            'code' => $this->currentMember->code,
-            'branch' => $this->currentMember->branch->branch_name ?? 'N/A',
-            'is_migs' => $this->currentMember->is_migs,
-            'share_amount' => $this->currentMember->share_amount,
-            'process_type' => $this->currentMember->process_type,
-        ];
+    public function getHeading(): string
+    {
+        return $this->hasAlreadyVoted ? 'Your Votes' : 'Cast Your Vote';
+    }
+
+    public function getSubheading(): ?string
+    {
+        return $this->hasAlreadyVoted
+            ? 'Thank you for participating in the election.'
+            : 'Select your preferred candidates for each position.';
     }
 }

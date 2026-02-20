@@ -22,7 +22,7 @@ class CandidateResource extends Resource
     protected static string|BackedEnum|null $navigationIcon = Heroicon::Users;
 
     protected static string | UnitEnum | null $navigationGroup = 'Manage';
-    protected static ?int $navigationSort = 3;
+    protected static ?int $navigationSort = 4;
 
     public static function form(Schema $schema): Schema
     {

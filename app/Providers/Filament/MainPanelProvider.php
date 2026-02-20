@@ -3,6 +3,7 @@
 namespace App\Providers\Filament;
 
 use App\Filament\Pages\VotingPage;
+use Filament\FontProviders\GoogleFontProvider;
 use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\AuthenticateSession;
 use Filament\Http\Middleware\DisableBladeIconComponents;
@@ -30,9 +31,21 @@ class MainPanelProvider extends PanelProvider
             ->path('main')
             ->viteTheme('resources/css/filament/main/theme.css')
             ->login()
+            ->profile(isSimple: false)
             ->colors([
-                'primary' => Color::Amber,
+                'primary' => Color::Green,
+                'gray' => Color::Slate,
+                'info' => Color::Blue,
+                'success' => Color::Emerald,
+                'warning' => Color::Orange,
+                'danger' => Color::Red,
             ])
+            ->maxContentWidth('7xl') // You can change the 7xl to full
+            ->font('Poppins')
+            ->brandName(config('app.name'))
+            ->brandLogoHeight('1rem')
+            ->sidebarCollapsibleOnDesktop()
+            ->sidebarFullyCollapsibleOnDesktop()
             ->discoverResources(in: app_path('Filament/Resources'), for: 'App\Filament\Resources')
             ->discoverPages(in: app_path('Filament/Pages'), for: 'App\Filament\Pages')
             ->pages([
@@ -54,6 +67,7 @@ class MainPanelProvider extends PanelProvider
                 DisableBladeIconComponents::class,
                 DispatchServingFilamentEvent::class,
             ])
+            ->spa()
             ->authMiddleware([
                 Authenticate::class,
             ]);
