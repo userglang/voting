@@ -202,59 +202,6 @@ class SummaryPage extends Page implements HasTable
                         }
                     }),
 
-                Action::make('exportPdf')
-                    ->label('Export to PDF (Detailed)')
-                    ->icon('heroicon-o-document-text')
-                    ->color('danger')
-                    ->form([
-                        Section::make('Export Filters')
-                            ->description('Filter the data to export')
-                            ->schema($this->exportFormSchema(withStatus: true, withMigs: true, withGender: true))
-                            ->columns(2),
-                    ])
-                    ->action(function (array $data) {
-                        try {
-                            $members = $this->buildMemberQuery($data, withBranch: true)
-                                ->orderBy('branch_number')
-                                ->orderBy('last_name')
-                                ->get();
-
-                            // Compute statistics from the already-loaded collection (no extra queries)
-                            $stats = $this->computeMemberStats($members);
-
-                            $branchName = !empty($data['branch_number'])
-                                ? Branch::where('branch_number', $data['branch_number'])->value('branch_name')
-                                : 'All Branches';
-
-                            $filters = [
-                                'branch_name'  => $branchName,
-                                'status_label' => match ($data['is_active'] ?? 'all') {
-                                    'active'   => 'Active Only',
-                                    'inactive' => 'Inactive Only',
-                                    default    => 'All Statuses',
-                                },
-                                'migs_label' => match ($data['is_migs'] ?? 'all') {
-                                    'yes'   => 'MIGS Only',
-                                    'no'    => 'Non-MIGS Only',
-                                    default => 'All Members',
-                                },
-                                'gender' => $data['gender'] ?? 'All Genders',
-                            ];
-
-                            $pdf = Pdf::loadView('pdf.members-report', array_merge(
-                                ['members' => $members, 'filters' => $filters],
-                                $stats
-                            ))->setPaper('a4', 'portrait');
-
-                            return response()->streamDownload(
-                                fn () => print($pdf->output()),
-                                'members-report-' . now()->format('Y-m-d-His') . '.pdf'
-                            );
-                        } catch (\Exception $e) {
-                            Notification::make()->title('Export Failed')->body($e->getMessage())->danger()->send();
-                        }
-                    }),
-
                 Action::make('exportPdfSummary')
                     ->label('Export to PDF (Summary)')
                     ->icon('heroicon-o-chart-bar-square')
@@ -267,15 +214,13 @@ class SummaryPage extends Page implements HasTable
                     ])
                     ->action(function (array $data) {
                         try {
-                            $branchQuery = Branch::where('is_active', true)->orderBy('branch_name');
+                            $branches = Branch::where('is_active', true)
+                                ->when(!empty($data['branch_number']), fn ($q) => $q->where('branch_number', $data['branch_number']))
+                                ->orderBy('branch_name')
+                                ->get();
 
-                            if (!empty($data['branch_number'])) {
-                                $branchQuery->where('branch_number', $data['branch_number']);
-                            }
+                            $branchNumbers = $branches->pluck('branch_number');
 
-                            $branchNumbers = $branchQuery->pluck('branch_number');
-
-                            // Single query: member stats per branch
                             $memberStats = Member::whereIn('branch_number', $branchNumbers)
                                 ->select([
                                     'branch_number',
@@ -289,13 +234,10 @@ class SummaryPage extends Page implements HasTable
                                 ->get()
                                 ->keyBy('branch_number');
 
-                            // Single query: vote counts per branch
                             $voteCounts = Vote::whereIn('branch_number', $branchNumbers)
                                 ->select('branch_number', DB::raw('COUNT(*) as total_casted_votes'))
                                 ->groupBy('branch_number')
                                 ->pluck('total_casted_votes', 'branch_number');
-
-                            $branches = $branchQuery->get();
 
                             $summary = $branches->map(function (Branch $branch) use ($memberStats, $voteCounts) {
                                 $stats        = $memberStats->get($branch->branch_number);
@@ -303,16 +245,14 @@ class SummaryPage extends Page implements HasTable
                                 $totalRegMigs = (int) ($stats->total_reg_migs ?? 0);
 
                                 return [
-                                    'branch_number'    => $branch->branch_number,
-                                    'branch_name'      => $branch->branch_name,
-                                    'total_members'    => (int) ($stats->total_members ?? 0),
-                                    'total_migs'       => $totalMigs,
-                                    'total_non_migs'   => (int) ($stats->total_non_migs ?? 0),
-                                    'total_reg_migs'   => $totalRegMigs,
+                                    'branch_number'      => $branch->branch_number,
+                                    'branch_name'        => $branch->branch_name,
+                                    'total_members'      => (int) ($stats->total_members ?? 0),
+                                    'total_migs'         => $totalMigs,
+                                    'total_non_migs'     => (int) ($stats->total_non_migs ?? 0),
+                                    'total_reg_migs'     => $totalRegMigs,
                                     'total_reg_non_migs' => (int) ($stats->total_reg_non_migs ?? 0),
-                                    'quorum_percentage' => $totalMigs > 0
-                                        ? round(($totalRegMigs / $totalMigs) * 100, 2)
-                                        : 0.0,
+                                    'quorum_percentage'  => $totalMigs > 0 ? round(($totalRegMigs / $totalMigs) * 100, 2) : 0.0,
                                     'total_casted_votes' => (int) ($voteCounts[$branch->branch_number] ?? 0),
                                 ];
                             });
@@ -321,24 +261,23 @@ class SummaryPage extends Page implements HasTable
                             $totalRegMigs = $summary->sum('total_reg_migs');
 
                             $pdf = Pdf::loadView('pdf.members-summary', [
-                                'summary'          => $summary,
-                                'totalMembers'     => $summary->sum('total_members'),
-                                'totalBranches'    => $summary->count(),
-                                'totalMigs'        => $totalMigs,
-                                'totalNonMigs'     => $summary->sum('total_non_migs'),
-                                'totalRegMigs'     => $totalRegMigs,
-                                'totalRegNonMigs'  => $summary->sum('total_reg_non_migs'),
-                                'totalRegistered'  => $summary->sum('total_reg_migs') + $summary->sum('total_reg_non_migs'),
-                                'totalVotes'       => $summary->sum('total_casted_votes'),
-                                'overallQuorum'    => $totalMigs > 0
-                                    ? round(($totalRegMigs / $totalMigs) * 100, 2)
-                                    : 0.0,
+                                'summary'         => $summary,
+                                'totalMembers'    => $summary->sum('total_members'),
+                                'totalBranches'   => $branches->count(),
+                                'totalMigs'       => $totalMigs,
+                                'totalNonMigs'    => $summary->sum('total_non_migs'),
+                                'totalRegMigs'    => $totalRegMigs,
+                                'totalRegNonMigs' => $summary->sum('total_reg_non_migs'),
+                                'totalRegistered' => $summary->sum('total_reg_migs') + $summary->sum('total_reg_non_migs'),
+                                'totalVotes'      => $summary->sum('total_casted_votes'),
+                                'overallQuorum'   => $totalMigs > 0 ? round(($totalRegMigs / $totalMigs) * 100, 2) : 0.0,
                             ])->setPaper('a4', 'portrait');
 
                             return response()->streamDownload(
                                 fn () => print($pdf->output()),
                                 'members-summary-' . now()->format('Y-m-d-His') . '.pdf'
                             );
+
                         } catch (\Exception $e) {
                             Notification::make()->title('Export Failed')->body('Error: ' . $e->getMessage())->danger()->send();
                         }

@@ -219,46 +219,6 @@ class VoteResults extends Page
                         }
                     }),
 
-                Action::make('exportPdf')
-                    ->label('Export to PDF (Detailed)')
-                    ->icon('heroicon-o-document-text')
-                    ->color('danger')
-                    ->form([
-                        Section::make('Export Filters')
-                            ->description('Filter the data to export')
-                            ->schema($this->voteExportSchema(withPosition: true))
-                            ->columns(2),
-                    ])
-                    ->action(function (array $data) {
-                        try {
-                            $query = Vote::query()
-                                ->with(['member', 'candidate.position', 'branch'])
-                                ->orderByDesc('created_at');
-
-                            $this->applyVoteFilters($query, $data);
-
-                            if (!empty($data['position_id'])) {
-                                $query->whereHas('candidate', fn ($q) =>
-                                    $q->where('position_id', $data['position_id'])
-                                );
-                            }
-
-                            $votes = $query->get();
-
-                            $pdf = Pdf::loadView('pdf.votes-report', [
-                                'votes'   => $votes,
-                                'filters' => $this->buildFilterLabels($data),
-                            ])->setPaper('a4', 'landscape');
-
-                            return response()->streamDownload(
-                                fn () => print($pdf->output()),
-                                'votes-report-' . now()->format('Y-m-d-His') . '.pdf'
-                            );
-                        } catch (\Exception $e) {
-                            Notification::make()->title('Export Failed')->body('Error: ' . $e->getMessage())->danger()->send();
-                        }
-                    }),
-
                 Action::make('exportPdfSummary')
                     ->label('Export to PDF (Summary)')
                     ->icon('heroicon-o-chart-bar-square')

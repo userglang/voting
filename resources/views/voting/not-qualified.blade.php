@@ -139,58 +139,55 @@
                         please contact the cooperative personnel:
                     </p>
 
-                    @if(config('app.support_email'))
+                    <!-- Facebook -->
                     <div class="flex items-center">
-                        <svg class="w-5 h-5 text-gray-400 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
+                        <svg class="w-5 h-5 text-gray-400 mr-3" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="M22 12a10 10 0 10-11.63 9.87v-6.99h-2.34v-2.88h2.34V9.84c0-2.31 1.37-3.59 3.48-3.59.99 0 2.03.18 2.03.18v2.23h-1.14c-1.13 0-1.48.7-1.48 1.42v1.7h2.52l-.4 2.88h-2.12v6.99A10 10 0 0022 12z"/>
                         </svg>
                         <div>
-                            <strong>Email:</strong>
-                            <a href="mailto:{{ config('app.support_email') }}" class="text-blue-600 hover:text-blue-700 ml-1">
-                                {{ config('app.support_email') }}
+                            <strong>Facebook:</strong>
+                            <a href="https://www.facebook.com/taranasaOIC/" target="_blank" class="text-blue-600 hover:text-blue-700 ml-1">
+                                Visit our page
                             </a>
                         </div>
                     </div>
-                    @endif
 
-                    @if(config('app.support_phone'))
+                    <!-- Instagram -->
                     <div class="flex items-center">
-                        <svg class="w-5 h-5 text-gray-400 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"/>
+                        <svg class="w-5 h-5 text-gray-400 mr-3" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="M7 2C4.243 2 2 4.243 2 7v10c0 2.757 2.243 5 5 5h10c2.757 0 5-2.243 5-5V7c0-2.757-2.243-5-5-5H7zm0 2h10c1.654 0 3 1.346 3 3v10c0 1.654-1.346 3-3 3H7c-1.654 0-3-1.346-3-3V7c0-1.654 1.346-3 3-3zm5 2a5 5 0 100 10 5 5 0 000-10zm0 2a3 3 0 110 6 3 3 0 010-6zm4.5-.5a1.5 1.5 0 100 3 1.5 1.5 0 000-3z"/>
                         </svg>
                         <div>
-                            <strong>Phone:</strong>
-                            <a href="tel:{{ config('app.support_phone') }}" class="text-blue-600 hover:text-blue-700 ml-1">
-                                {{ config('app.support_phone') }}
+                            <strong>Instagram:</strong>
+                            <a href="https://www.instagram.com/orointegratedcoop/" target="_blank" class="text-blue-600 hover:text-blue-700 ml-1">
+                                Follow us
                             </a>
                         </div>
                     </div>
-                    @endif
 
-                    @if(config('app.office_hours'))
+                    <!-- Website -->
+                    <div class="flex items-center">
+                        <svg class="w-5 h-5 text-gray-400 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 2a10 10 0 100 20 10 10 0 000-20zm0 0v6l4 2"/>
+                        </svg>
+                        <div>
+                            <strong>Website:</strong>
+                            <a href="https://www.orointegrated.coop/" target="_blank" class="text-blue-600 hover:text-blue-700 ml-1">
+                                www.orointegrated.coop
+                            </a>
+                        </div>
+                    </div>
+
+                    <!-- Office Hours -->
                     <div class="flex items-center">
                         <svg class="w-5 h-5 text-gray-400 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
                         </svg>
                         <div>
                             <strong>Office Hours:</strong>
-                            <span class="ml-1">{{ config('app.office_hours') }}</span>
+                            <span class="ml-1">Mon-Fri 8:00 AM - 3:30 PM, Sat 8:00 AM - 10:30 AM</span>
                         </div>
                     </div>
-                    @endif
-
-                    @if(config('app.office_address'))
-                    <div class="flex items-start">
-                        <svg class="w-5 h-5 text-gray-400 mr-3 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/>
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/>
-                        </svg>
-                        <div>
-                            <strong>Office Address:</strong><br>
-                            <span class="ml-1 text-gray-600">{{ config('app.office_address') }}</span>
-                        </div>
-                    </div>
-                    @endif
                 </div>
             </div>
 

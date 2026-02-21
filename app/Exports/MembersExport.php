@@ -23,136 +23,76 @@ class MembersExport implements
     WithTitle,
     ShouldAutoSize
 {
-    protected $filters;
-
-    public function __construct(array $filters = [])
-    {
-        $this->filters = $filters;
-    }
+    public function __construct(protected array $filters = []) {}
 
     public function query()
     {
-        $query = Member::query()
-            ->with(['branch'])
+        return Member::query()
+            ->with('branch')
+            ->when(!empty($this->filters['branch_number']), fn ($q) => $q->where('branch_number', $this->filters['branch_number']))
+            ->when($this->filters['is_migs'] === 'yes',      fn ($q) => $q->where('is_migs', true))
+            ->when($this->filters['is_migs'] === 'no',       fn ($q) => $q->where('is_migs', false))
+            ->when($this->filters['is_active'] === 'active',   fn ($q) => $q->where('is_active', true))
+            ->when($this->filters['is_active'] === 'inactive', fn ($q) => $q->where('is_active', false))
+            ->when($this->filters['is_registered'] === 'registered',     fn ($q) => $q->where('is_registered', true))
+            ->when($this->filters['is_registered'] === 'not_registered', fn ($q) => $q->where('is_registered', false))
+            ->when(!empty($this->filters['gender']), fn ($q) => $q->where('gender', $this->filters['gender']))
             ->orderBy('branch_number')
             ->orderBy('last_name')
             ->orderBy('first_name');
-
-        // Apply filters
-        if (!empty($this->filters['branch_number'])) {
-            $query->where('branch_number', $this->filters['branch_number']);
-        }
-
-        if (!empty($this->filters['is_migs'])) {
-            if ($this->filters['is_migs'] === 'yes') {
-                $query->where('is_migs', true);
-            } elseif ($this->filters['is_migs'] === 'no') {
-                $query->where('is_migs', false);
-            }
-        }
-
-        if (!empty($this->filters['is_active'])) {
-            if ($this->filters['is_active'] === 'active') {
-                $query->where('is_active', true);
-            } elseif ($this->filters['is_active'] === 'inactive') {
-                $query->where('is_active', false);
-            }
-        }
-
-        if (!empty($this->filters['is_registered'])) {
-            if ($this->filters['is_registered'] === 'registered') {
-                $query->where('is_registered', true);
-            } elseif ($this->filters['is_registered'] === 'not_registered') {
-                $query->where('is_registered', false);
-            }
-        }
-
-        if (!empty($this->filters['gender'])) {
-            $query->where('gender', $this->filters['gender']);
-        }
-
-        return $query;
     }
 
     public function headings(): array
     {
         return [
-            'Code',
-            'CID',
-            'Branch Number',
-            'Branch Name',
-            'Last Name',
-            'First Name',
-            'Middle Name',
-            'Full Name',
-            'Birth Date',
-            'Age',
-            'Gender',
-            'Marital Status',
-            'Religion',
-            'Address',
-            'Contact Number',
-            'Email',
-            'Occupation',
-            'Share Account',
-            'Share Amount',
-            'MIGS',
-            'Active',
-            'Registered',
-            'Process Type',
-            'Registration Type',
-            'Membership Date',
+            'Code', 'CID', 'Branch Number', 'Branch Name',
+            'Last Name', 'First Name', 'Middle Name', 'Full Name',
+            'Birth Date', 'Age', 'Gender', 'Marital Status',
+            'Religion', 'Address', 'Contact Number', 'Email',
+            'Occupation', 'Share Account', 'Share Amount',
+            'MIGS', 'Active', 'Registered',
+            'Process Type', 'Registration Type', 'Membership Date',
         ];
     }
 
-    public function map($member): array
+    public function map($m): array
     {
         return [
-            $member->code ?? 'N/A',
-            $member->cid ?? 'N/A',
-            $member->branch_number ?? 'N/A',
-            $member->branch?->branch_name ?? 'N/A',
-            $member->last_name ?? 'N/A',
-            $member->first_name ?? 'N/A',
-            $member->middle_name ?? 'N/A',
-            $member->full_name ?? 'N/A',
-            $member->birth_date?->format('Y-m-d') ?? 'N/A',
-            $member->age ?? 'N/A',
-            $member->gender ?? 'N/A',
-            $member->marital_status ?? 'N/A',
-            $member->religion ?? 'N/A',
-            $member->address ?? 'N/A',
-            $member->contact_number ?? 'N/A',
-            $member->email ?? 'N/A',
-            $member->occupation ?? 'N/A',
-            $member->share_account ?? 'N/A',
-            $member->share_amount ? number_format($member->share_amount, 2) : '0.00',
-            $member->is_migs ? 'YES' : 'NO',
-            $member->is_active ? 'YES' : 'NO',
-            $member->is_registered ? 'YES' : 'NO',
-            $member->process_type ?? 'N/A',
-            $member->registration_type ?? 'N/A',
-            $member->membership_date?->format('Y-m-d') ?? 'N/A',
+            $m->code                                    ?? 'N/A',
+            $m->cid                                     ?? 'N/A',
+            $m->branch_number                           ?? 'N/A',
+            $m->branch?->branch_name                    ?? 'N/A',
+            $m->last_name                               ?? 'N/A',
+            $m->first_name                              ?? 'N/A',
+            $m->middle_name                             ?? 'N/A',
+            $m->full_name                               ?? 'N/A',
+            $m->birth_date?->format('Y-m-d')            ?? 'N/A',
+            $m->age                                     ?? 'N/A',
+            $m->gender                                  ?? 'N/A',
+            $m->marital_status                          ?? 'N/A',
+            $m->religion                                ?? 'N/A',
+            $m->address                                 ?? 'N/A',
+            $m->contact_number                          ?? 'N/A',
+            $m->email                                   ?? 'N/A',
+            $m->occupation                              ?? 'N/A',
+            $m->share_account                           ?? 'N/A',
+            $m->share_amount ? number_format($m->share_amount, 2) : '0.00',
+            $m->is_migs       ? 'YES' : 'NO',
+            $m->is_active     ? 'YES' : 'NO',
+            $m->is_registered ? 'YES' : 'NO',
+            $m->process_type       ?? 'N/A',
+            $m->registration_type  ?? 'N/A',
+            $m->membership_date?->format('Y-m-d') ?? 'N/A',
         ];
     }
 
-    public function styles(Worksheet $sheet)
+    public function styles(Worksheet $sheet): array
     {
         return [
             1 => [
-                'font' => [
-                    'bold' => true,
-                    'color' => ['rgb' => 'FFFFFF'],
-                    'size' => 11,
-                ],
-                'fill' => [
-                    'fillType' => Fill::FILL_SOLID,
-                    'startColor' => ['rgb' => '059669'],
-                ],
-                'alignment' => [
-                    'horizontal' => Alignment::HORIZONTAL_CENTER,
-                    'vertical' => Alignment::VERTICAL_CENTER,
-                ],
+                'font'      => ['bold' => true, 'color' => ['rgb' => 'FFFFFF'], 'size' => 11],
+                'fill'      => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => '059669']],
+                'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER, 'vertical' => Alignment::VERTICAL_CENTER],
             ],
         ];
     }
@@ -160,31 +100,13 @@ class MembersExport implements
     public function columnWidths(): array
     {
         return [
-            'A' => 20,  // Code
-            'B' => 15,  // CID
-            'C' => 15,  // Branch Number
-            'D' => 25,  // Branch Name
-            'E' => 20,  // Last Name
-            'F' => 20,  // First Name
-            'G' => 20,  // Middle Name
-            'H' => 35,  // Full Name
-            'I' => 15,  // Birth Date
-            'J' => 8,   // Age
-            'K' => 10,  // Gender
-            'L' => 15,  // Marital Status
-            'M' => 15,  // Religion
-            'N' => 35,  // Address
-            'O' => 15,  // Contact Number
-            'P' => 25,  // Email
-            'Q' => 20,  // Occupation
-            'R' => 15,  // Share Account
-            'S' => 15,  // Share Amount
-            'T' => 8,   // MIGS
-            'U' => 8,   // Active
-            'V' => 12,  // Registered
-            'W' => 25,  // Process Type
-            'X' => 20,  // Registration Type
-            'Y' => 18,  // Membership Date
+            'A' => 20, 'B' => 15, 'C' => 15, 'D' => 25,
+            'E' => 20, 'F' => 20, 'G' => 20, 'H' => 35,
+            'I' => 15, 'J' => 8,  'K' => 10, 'L' => 15,
+            'M' => 15, 'N' => 35, 'O' => 15, 'P' => 25,
+            'Q' => 20, 'R' => 15, 'S' => 15, 'T' => 8,
+            'U' => 8,  'V' => 12, 'W' => 25, 'X' => 20,
+            'Y' => 18,
         ];
     }
 

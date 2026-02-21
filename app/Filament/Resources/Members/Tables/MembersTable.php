@@ -13,8 +13,11 @@ use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Actions\CreateAction;
 use Filament\Forms\Components\Checkbox;
+use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
+use Filament\Tables\Filters\Filter;
+use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
 use Illuminate\Support\Collection;
 use League\Csv\Writer;
@@ -121,6 +124,40 @@ class MembersTable
                 // - Gender
                 // - Registration Type
                 // - Date ranges
+
+                SelectFilter::make('is_registered')
+                    ->label('Registration Status')
+                    ->options([
+                        '1' => 'Registered',
+                        '0' => 'Not Registered',
+                    ]),
+                SelectFilter::make('branch_id')
+                    ->label('Branch')
+                    ->relationship('branch', 'branch_name')
+                    ->searchable()
+                    ->preload(),
+                SelectFilter::make('is_active')
+                    ->label('Account Status')
+                    ->options([
+                        '1' => 'Active',
+                        '0' => 'Archived',
+                    ]),
+                SelectFilter::make('gender')
+                    ->options([
+                        'Male' => 'Male',
+                        'Female' => 'Female',
+                    ]),
+                Filter::make('birth_date')
+                    ->label('Birth Date Range')
+                    ->form([
+                        DatePicker::make('from')->label('From'),
+                        DatePicker::make('until')->label('Until'),
+                    ])
+                    ->query(function ($query, array $data) {
+                        return $query
+                            ->when($data['from'], fn ($q) => $q->whereDate('birth_date', '>=', $data['from']))
+                            ->when($data['until'], fn ($q) => $q->whereDate('birth_date', '<=', $data['until']));
+                    }),
             ])
             ->recordActions([
                 // Custom Update Action for Registration Status

@@ -112,23 +112,42 @@
                 If you believe this is an error or have questions about your voting status, please contact us:
             </p>
             <div class="space-y-2 text-sm">
+                <!-- Facebook -->
+                <div class="flex items-center">
+                    <svg class="h-5 w-5 text-gray-500 mr-3" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M22 12a10 10 0 10-11.63 9.87v-6.99h-2.34v-2.88h2.34V9.84c0-2.31 1.37-3.59 3.48-3.59.99 0 2.03.18 2.03.18v2.23h-1.14c-1.13 0-1.48.7-1.48 1.42v1.7h2.52l-.4 2.88h-2.12v6.99A10 10 0 0022 12z"/>
+                    </svg>
+                    <span class="text-gray-700">Facebook:
+                        <a href="https://www.facebook.com/taranasaOIC/" target="_blank" class="text-blue-600 hover:text-blue-800">Visit our page</a>
+                    </span>
+                </div>
+
+                <!-- Instagram -->
+                <div class="flex items-center">
+                    <svg class="h-5 w-5 text-gray-500 mr-3" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M7 2C4.243 2 2 4.243 2 7v10c0 2.757 2.243 5 5 5h10c2.757 0 5-2.243 5-5V7c0-2.757-2.243-5-5-5H7zm0 2h10c1.654 0 3 1.346 3 3v10c0 1.654-1.346 3-3 3H7c-1.654 0-3-1.346-3-3V7c0-1.654 1.346-3 3-3zm5 2a5 5 0 100 10 5 5 0 000-10zm0 2a3 3 0 110 6 3 3 0 010-6zm4.5-.5a1.5 1.5 0 100 3 1.5 1.5 0 000-3z"/>
+                    </svg>
+                    <span class="text-gray-700">Instagram:
+                        <a href="https://www.instagram.com/orointegratedcoop/" target="_blank" class="text-blue-600 hover:text-blue-800">Follow us</a>
+                    </span>
+                </div>
+
+                <!-- Website -->
                 <div class="flex items-center">
                     <svg class="h-5 w-5 text-gray-500 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 2a10 10 0 100 20 10 10 0 000-20zm0 0v6l4 2"/>
                     </svg>
-                    <span class="text-gray-700">Email: <a href="mailto:support@cooperative.com" class="text-blue-600 hover:text-blue-800">support@cooperative.com</a></span>
+                    <span class="text-gray-700">Website:
+                        <a href="https://www.orointegrated.coop/" target="_blank" class="text-blue-600 hover:text-blue-800">www.orointegrated.coop</a>
+                    </span>
                 </div>
-                <div class="flex items-center">
-                    <svg class="h-5 w-5 text-gray-500 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"/>
-                    </svg>
-                    <span class="text-gray-700">Phone: +63 XXX XXX XXXX</span>
-                </div>
+
+                <!-- Office Hours -->
                 <div class="flex items-center">
                     <svg class="h-5 w-5 text-gray-500 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
                     </svg>
-                    <span class="text-gray-700">Office Hours: Monday - Friday, 8:00 AM - 5:00 PM</span>
+                    <span class="text-gray-700">Office Hours: Mon-Fri 8:00 AM - 3:30 PM, Sat 8:00 AM - 10:30 AM</span>
                 </div>
             </div>
         </div>

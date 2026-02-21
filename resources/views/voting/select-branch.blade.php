@@ -63,7 +63,7 @@
                     <option value="">-- Select Branch --</option>
                     @foreach($branches as $branch)
                         <option value="{{ $branch->id }}" data-branch-number="{{ $branch->branch_number }}">
-                            {{ $branch->branch_name }} ({{ $branch->code }})
+                            {{ ucwords(str_ireplace('OIC ', '', $branch->branch_name)) }} Branch
                         </option>
                     @endforeach
                 </select>
