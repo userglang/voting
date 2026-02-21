@@ -127,6 +127,7 @@ class MembersTable
 
                 SelectFilter::make('is_registered')
                     ->label('Registration Status')
+                    ->default(true)
                     ->options([
                         '1' => 'Registered',
                         '0' => 'Not Registered',
@@ -136,6 +137,13 @@ class MembersTable
                     ->relationship('branch', 'branch_name')
                     ->searchable()
                     ->preload(),
+                SelectFilter::make('is_migs')
+                    ->label('MIGS Status')
+                    ->options([
+                        '1' => 'MIGS',
+                        '0' => 'Non-MIGS',
+                    ])
+                    ->default('1'),
                 SelectFilter::make('is_active')
                     ->label('Account Status')
                     ->options([
