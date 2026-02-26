@@ -31,6 +31,7 @@ class Member extends Model
         'occupation',
         'birth_date',
         'email',
+        'tin',
         'contact_number',
         'gender',
         'marital_status',

@@ -82,10 +82,26 @@
                 </div>
             </div>
 
+            <!-- TIN (Taxpayer Identification Number) -->
+            <div class="mb-6">
+                <label for="tin" class="block text-sm font-medium text-gray-700 mb-2">
+                    TIN (Taxpayer Identification Number) *
+                </label>
+                <input type="text"
+                    id="tin"
+                    name="tin"
+                    class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 @error('tin') border-red-300 @enderror"
+                    placeholder="Enter your TIN"
+                    value="{{ old('tin', $member->tin) }}">
+                @error('tin')
+                    <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
+                @enderror
+            </div>
+
             <!-- Marital Status -->
             <div class="mb-6">
                 <label for="marital_status" class="block text-sm font-medium text-gray-700 mb-2">
-                    Marital Status
+                    Marital Status *
                 </label>
                 <select id="marital_status" name="marital_status" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 @error('marital_status') border-red-300 @enderror">
                     <option value="single" {{ old('marital_status', $member->marital_status) == 'Single' ? 'selected' : '' }}>Single</option>
@@ -101,7 +117,7 @@
             <!-- Religion -->
             <div class="mb-6">
                 <label for="religion" class="block text-sm font-medium text-gray-700 mb-2">
-                    Religion
+                    Religion *
                 </label>
                 <input type="text"
                     id="religion"

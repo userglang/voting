@@ -174,7 +174,7 @@ class MembersImport implements ToCollection, WithHeadingRow, WithChunkReading
         }
 
         return [
-            'code'          => $this->generateCode($this->branchNumber, $cid, $lastName),
+            'code'          => $this->generateCode($this->branchNumber, $cid),
             'cid'           => $cid,
             'branch_number' => $this->branchNumber,
             'first_name'    => $firstName,
@@ -205,14 +205,13 @@ class MembersImport implements ToCollection, WithHeadingRow, WithChunkReading
      * Format: OIC{LAST4}-{branch_padded}-{cid_padded}
      * Example: OICSMIT-011-000123
      */
-    protected function generateCode(string $branchNumber, string $cid, string $lastName): string
+    protected function generateCode(string $branchNumber, string $cid): string
     {
         $branchPadded  = str_pad($branchNumber, 3, '0', STR_PAD_LEFT);
         $cidCleaned    = preg_replace('/[^A-Za-z0-9]/', '', $cid);
         $cidPadded     = str_pad($cidCleaned, 3, '0', STR_PAD_LEFT);
-        $lastNameShort = substr(strtoupper(preg_replace('/[^A-Za-z0-9]/', '', $lastName)), 0, 4);
 
-        return "OIC{$lastNameShort}-{$branchPadded}-{$cidPadded}";
+        return "OIC{$branchPadded}-{$cidPadded}";
     }
 
     /**

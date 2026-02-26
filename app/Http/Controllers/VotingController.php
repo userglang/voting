@@ -28,6 +28,7 @@ class VotingController extends Controller
     private const SESSION_VERIFIED_AT   = 'voting.verified_at';
     private const SESSION_CONTROL_NUM   = 'voting.control_number';
     private const SESSION_VOTES_DONE    = 'voting.votes_submitted';
+    private const SESSION_ALREADY_VOTED = 'voting.already_voted';
 
     private const SESSION_VERIFICATION_EXPIRY_MINUTES = 30;
 
@@ -185,7 +186,11 @@ class VotingController extends Controller
 
         // Check if already voted
         if ($this->memberHasVoted($member)) {
-            $this->clearFullSession();
+            // Store identifiers before clearing so already-voted page can verify
+            Session::put(self::SESSION_MEMBER_CODE, $member->code);
+            Session::put(self::SESSION_BRANCH_NUMBER, $member->branch_number);
+            $this->clearSessionForAlreadyVoted();
+
             return redirect()->route('voting.already-voted');
         }
 
@@ -226,18 +231,20 @@ class VotingController extends Controller
         }
 
         $request->validate([
+            'tin'            => 'required|string|max:20',
             'address'        => 'required|string|max:255',
             'email'          => 'nullable|email|max:100',
             'contact_number' => 'required|string|max:20',
             'occupation'     => 'nullable|string|max:100',
-            'marital_status' => 'nullable|string|in:single,married,divorced,widowed',
-            'religion'       => 'nullable|string|max:100',
+            'marital_status' => 'required|string|in:single,married,divorced,widowed',
+            'religion'       => 'required|string|max:100',
         ]);
 
         try {
             $member = $this->getSessionMember();
 
             $member->update([
+                'tin'               => $request->tin,
                 'address'           => $request->address,
                 'email'             => $request->email,
                 'contact_number'    => $request->contact_number,
@@ -366,7 +373,10 @@ class VotingController extends Controller
 
             if ($this->memberHasVoted($member)) {
                 DB::rollBack();
-                $this->clearFullSession();
+                // Preserve identifiers before clearing so already-voted page can verify
+                Session::put(self::SESSION_MEMBER_CODE, $member->code);
+                Session::put(self::SESSION_BRANCH_NUMBER, $member->branch_number);
+                $this->clearSessionForAlreadyVoted();
 
                 return redirect()->route('voting.already-voted');
             }
@@ -487,7 +497,6 @@ class VotingController extends Controller
 
     public function alreadyVoted()
     {
-        // Must have come from a valid voting flow with a known member
         $memberCode   = Session::get(self::SESSION_MEMBER_CODE);
         $branchNumber = Session::get(self::SESSION_BRANCH_NUMBER);
 
@@ -503,6 +512,9 @@ class VotingController extends Controller
         if (!$hasVoted) {
             return redirect()->route('voting.select-branch');
         }
+
+        // Clean up remaining session data now that we've confirmed and are displaying the page
+        $this->clearFullSession();
 
         return view('voting.already-voted');
     }
@@ -616,7 +628,10 @@ class VotingController extends Controller
         if ($this->memberHasVoted($member)) {
             Log::info('Already-voted member attempted to proceed', ['member_code' => $member->code, 'ip' => $ip]);
 
-            $this->clearFullSession();
+            // Preserve identifiers before clearing so already-voted page can verify
+            Session::put(self::SESSION_MEMBER_CODE, $member->code);
+            Session::put(self::SESSION_BRANCH_NUMBER, $member->branch_number);
+            $this->clearSessionForAlreadyVoted();
 
             return redirect()->route('voting.already-voted');
         }
@@ -737,7 +752,25 @@ class VotingController extends Controller
     }
 
     /**
-     * Clear all voting session data (used after download).
+     * Clear only the sensitive/auth session keys, preserving member identifiers
+     * so the already-voted page can still verify the member before final cleanup.
+     */
+    private function clearSessionForAlreadyVoted(): void
+    {
+        Session::put(self::SESSION_ALREADY_VOTED, true);
+
+        Session::forget([
+            self::SESSION_BRANCH_ID,
+            self::SESSION_MEMBER_ID,
+            self::SESSION_VERIFIED,
+            self::SESSION_VERIFIED_AT,
+            self::SESSION_CONTROL_NUM,
+            self::SESSION_VOTES_DONE,
+        ]);
+    }
+
+    /**
+     * Clear all voting session data (used after download or final cleanup).
      */
     private function clearFullSession(): void
     {
@@ -750,6 +783,7 @@ class VotingController extends Controller
             self::SESSION_VERIFIED_AT,
             self::SESSION_CONTROL_NUM,
             self::SESSION_VOTES_DONE,
+            self::SESSION_ALREADY_VOTED,
         ]);
     }
 }
