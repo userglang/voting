@@ -83,7 +83,7 @@
             <div class="flex items-center justify-between">
                 <div>
                     <h1 class="text-2xl font-bold text-blue-900">Oro Integrated Cooperative</h1>
-                    <p class="text-sm text-gray-600 mt-1">Electronic Voting</p>
+                    <p class="text-sm text-gray-600 mt-1">Electronic Registration and Voting</p>
                 </div>
                 <div class="text-right">
                     <p class="text-xs text-gray-500">{{ now()->format('F d, Y') }}</p>
