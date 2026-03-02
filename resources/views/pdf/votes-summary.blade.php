@@ -51,10 +51,32 @@
         .summary-table td {
             font-weight: bold;
         }
+        .vote-bar-wrap {
+            background-color: #ecf0f1;
+            border-radius: 4px;
+            height: 15px;
+            width: 100%;
+        }
         .vote-bar {
             background-color: #2ecc71;
             height: 15px;
             border-radius: 4px;
+            min-width: 0;
+        }
+        .zero-votes {
+            color: #95a5a6;
+            font-style: italic;
+        }
+        .leading-badge {
+            background-color: #f39c12;
+            color: white;
+            padding: 1px 5px;
+            border-radius: 3px;
+            font-size: 10px;
+            margin-left: 4px;
+        }
+        .no-vote-row td {
+            color: #95a5a6;
         }
     </style>
 </head>
@@ -104,12 +126,16 @@
         </div>
     @else
         @foreach($summary as $positionData)
-            <h3>{{ $positionData['position_title'] }}
+            <h3>
+                {{ $positionData['position_title'] }}
                 @if($positionData['vacant_count'] > 1)
                     ({{ $positionData['vacant_count'] }} positions available)
                 @endif
             </h3>
-            <p>Total Votes: {{ $positionData['total_votes'] }} | Candidates: {{ $positionData['candidates']->count() }}</p>
+            <p>
+                Total Votes: {{ $positionData['total_votes'] }} |
+                Candidates: {{ count($positionData['candidates']) }}
+            </p>
 
             <table>
                 <thead>
@@ -123,16 +149,32 @@
                 </thead>
                 <tbody>
                     @foreach($positionData['candidates'] as $index => $candidate)
-                        <tr>
+                        <tr class="{{ $candidate['total'] === 0 ? 'no-vote-row' : '' }}">
                             <td>{{ $index + 1 }}</td>
                             <td>
                                 {{ $candidate['name'] }}
-                                @if($index == 0) <strong>Leading</strong> @endif
+                                @if($index === 0 && $candidate['total'] > 0)
+                                    <span class="leading-badge">Leading</span>
+                                @endif
                             </td>
-                            <td>{{ $candidate['total'] }} ({{ $candidate['percentage'] }}%)</td>
-                            <td>Online: {{ $candidate['online'] }} | Offline: {{ $candidate['offline'] }}</td>
                             <td>
-                                <div class="vote-bar" style="width: {{ $candidate['percentage'] }}%;"></div>
+                                @if($candidate['total'] > 0)
+                                    {{ $candidate['total'] }} ({{ $candidate['percentage'] }}%)
+                                @else
+                                    <span class="zero-votes">No votes yet</span>
+                                @endif
+                            </td>
+                            <td>
+                                @if($candidate['total'] > 0)
+                                    Online: {{ $candidate['online'] }} | Offline: {{ $candidate['offline'] }}
+                                @else
+                                    <span class="zero-votes">—</span>
+                                @endif
+                            </td>
+                            <td>
+                                <div class="vote-bar-wrap">
+                                    <div class="vote-bar" style="width: {{ $candidate['percentage'] }}%;"></div>
+                                </div>
                             </td>
                         </tr>
                     @endforeach
@@ -146,5 +188,6 @@
         <p>This report is generated automatically. All data is accurate as of {{ now()->format('F d, Y g:i A') }}.</p>
         <p>&copy; {{ now()->year }} Voting System. All rights reserved.</p>
     </div>
+
 </body>
 </html>

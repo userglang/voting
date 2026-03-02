@@ -232,10 +232,11 @@ class VoteResults extends Page
                     ->action(function (array $data) {
                         try {
                             // Aggregate in SQL — avoids loading all votes into memory
+                            // Using Candidate as base with leftJoin to include zero-vote candidates
                             $voteAgg = $this->applyVoteFilters(
-                                Vote::query()
-                                    ->join('candidates', 'votes.candidate_id', '=', 'candidates.id')
+                                Candidate::query()
                                     ->join('positions', 'candidates.position_id', '=', 'positions.id')
+                                    ->leftJoin('votes', 'votes.candidate_id', '=', 'candidates.id')
                                     ->select([
                                         'positions.id as position_id',
                                         'positions.title as position_title',
@@ -243,9 +244,9 @@ class VoteResults extends Page
                                         'candidates.id as candidate_id',
                                         DB::raw('candidates.first_name'),
                                         DB::raw('candidates.last_name'),
-                                        DB::raw('COUNT(*) as total'),
+                                        DB::raw('COUNT(votes.id) as total'),
                                         DB::raw('SUM(CASE WHEN votes.online_vote = 1 THEN 1 ELSE 0 END) as online'),
-                                        DB::raw('SUM(CASE WHEN votes.online_vote = 0 THEN 1 ELSE 0 END) as offline'),
+                                        DB::raw('SUM(CASE WHEN votes.online_vote = 0 AND votes.id IS NOT NULL THEN 1 ELSE 0 END) as offline'),
                                     ])
                                     ->groupBy(
                                         'positions.id', 'positions.title', 'positions.vacant_count',
@@ -264,7 +265,7 @@ class VoteResults extends Page
                             $summary = $voteAgg
                                 ->groupBy('position_id')
                                 ->map(function (Collection $rows) {
-                                    $first             = $rows->first();
+                                    $first              = $rows->first();
                                     $totalPositionVotes = $rows->sum('total');
 
                                     $candidates = $rows->map(fn ($row) => [

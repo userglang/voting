@@ -424,7 +424,7 @@
 
     <div class="footer">
         <div class="footer-brand">Oro Integrated Cooperative</div>
-        <div class="footer-tagline">Secure · Transparent · Democratic</div>
+        <div class="footer-tagline">Where financial freedom begins!</div>
         <div class="footer-hours">
         <div class="hour-item">
             <strong>Mon – Fri</strong>
