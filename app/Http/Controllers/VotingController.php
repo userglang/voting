@@ -231,7 +231,7 @@ class VotingController extends Controller
         }
 
         $request->validate([
-            'tin'            => 'required|string|max:20',
+            'tin'            => 'nullable|string|max:20',
             'address'        => 'required|string|max:255',
             'email'          => 'nullable|email|max:100',
             'contact_number' => 'required|string|max:20',
