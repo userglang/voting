@@ -85,7 +85,7 @@
             <!-- TIN (Taxpayer Identification Number) -->
             <div class="mb-6">
                 <label for="tin" class="block text-sm font-medium text-gray-700 mb-2">
-                    TIN (Taxpayer Identification Number) *
+                    TIN (Taxpayer Identification Number)
                 </label>
                 <input type="text"
                     id="tin"
