@@ -57,18 +57,31 @@ class VotingController extends Controller
         ]);
 
         try {
-            $branch  = Branch::findOrFail($request->branch_id);
-            $search  = strtolower(trim($request->search_term));
+            $branch = Branch::findOrFail($request->branch_id);
+
+            $search = trim($request->search_term);
+
+            if (str_contains($search, ',')) {
+                // Handle: "Last, First"
+                [$last, $first] = array_map('trim', explode(',', $search, 2));
+                $search = $first . ' ' . $last;
+            }
+
+            $terms = collect(explode(' ', strtolower($search)))->filter();
 
             $members = Member::where('branch_number', $branch->branch_number)
                 ->where('is_active', true)
-                ->where(function ($query) use ($search, $request) {
-                    $query->whereRaw('LOWER(first_name) LIKE ?', ["%{$search}%"])
-                        ->orWhereRaw('LOWER(last_name) LIKE ?', ["%{$search}%"])
-                        ->orWhereRaw('LOWER(CONCAT(first_name, " ", last_name)) LIKE ?', ["%{$search}%"])
-                        ->orWhere('code', 'LIKE', "%{$request->search_term}%");
+                ->when($terms->isNotEmpty(), function ($query) use ($terms) {
+                    $query->where(function ($q) use ($terms) {
+                        foreach ($terms as $term) {
+                            $q->where(function ($sub) use ($term) {
+                                $sub->where('first_name', 'LIKE', "%{$term}%")
+                                    ->orWhere('last_name', 'LIKE', "%{$term}%")
+                                    ->orWhere('code', 'LIKE', "%{$term}%");
+                            });
+                        }
+                    });
                 })
-                ->select('id', 'code', 'first_name', 'last_name', 'middle_name', 'address')
                 ->limit(15)
                 ->get()
                 ->map(fn($m) => [
@@ -81,7 +94,10 @@ class VotingController extends Controller
                     'address'     => $m->address,
                 ]);
 
-            return response()->json(['success' => true, 'members' => $members]);
+            return response()->json([
+                'success' => true,
+                'members' => $members
+            ]);
 
         } catch (\Exception $e) {
             Log::error('Member search error', ['error' => $e->getMessage(), 'ip' => $request->ip()]);
@@ -421,6 +437,37 @@ class VotingController extends Controller
 
             return back()->withErrors(['error' => 'Failed to submit votes. Please try again.']);
         }
+    }
+
+    // ─── Step 8b: Abstain ────────────────────────────────────────────────────
+
+    public function abstain(Request $request): RedirectResponse
+    {
+        if (!$this->isVerifiedSession()) {
+            return redirect()->route('voting.select-branch')
+                ->withErrors(['session' => 'Session expired. Please start again.']);
+        }
+
+        try {
+            $member = $this->getSessionMember();
+
+            Log::info('Member chose to abstain', [
+                'member_code'   => $member->code,
+                'branch_number' => $member->branch_number,
+                'ip'            => $request->ip(),
+            ]);
+
+        } catch (\Exception $e) {
+            Log::warning('Abstain: could not resolve member from session', [
+                'error' => $e->getMessage(),
+                'ip'    => $request->ip(),
+            ]);
+        }
+
+        $this->clearFullSession();
+
+        return redirect()->route('voting.select-branch')
+            ->with('info', 'You have chosen not to vote at this time. Your session has been cleared.');
     }
 
     // ─── Step 9: Show Confirmation ────────────────────────────────────────────

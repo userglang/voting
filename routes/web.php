@@ -65,4 +65,7 @@ Route::prefix('start')->name('voting.')->group(function () {
     // Already voted page
     Route::get('/already-voted', [VotingController::class, 'alreadyVoted'])
         ->name('already-voted');
+
+    Route::post('/abstain', [VotingController::class, 'abstain'])
+        ->name('abstain');
 });

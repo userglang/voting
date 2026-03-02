@@ -1,6 +1,6 @@
 /**
  * Cooperative Voting System - Optimized Ballot JavaScript
- * @version 3.1 - With Candidate Profile Modal
+ * @version 3.2 - With Abstain Feature
  * @author Voting System Team
  */
 
@@ -54,6 +54,7 @@ class VotingSystem {
         this.initCandidateSelection();
         this.initReviewModal();
         this.initCandidateProfileModal();
+        this.initAbstainModal();
         this.initBeforeUnload();
         this.initKeyboardNavigation();
         this.initAnimations();
@@ -523,10 +524,10 @@ class VotingSystem {
             e.preventDefault();
             e.stopPropagation(); // prevent candidate card toggle
 
-            const infoEl    = btn.closest('[data-candidate-name]');
-            const name      = infoEl?.dataset.candidateName    || '';
-            const profile   = infoEl?.dataset.candidateProfile || 'No background profile available.';
-            const imageUrl  = infoEl?.dataset.candidateImage   || '';
+            const infoEl   = btn.closest('[data-candidate-name]');
+            const name     = infoEl?.dataset.candidateName    || '';
+            const profile  = infoEl?.dataset.candidateProfile || 'No background profile available.';
+            const imageUrl = infoEl?.dataset.candidateImage   || '';
 
             this.showCandidateProfileModal(name, profile, imageUrl);
         });
@@ -591,6 +592,62 @@ class VotingSystem {
             modal.classList.add('hidden');
             modal.classList.remove('animate-fade-in', 'animate-fade-out');
         }, VotingSystem.CONFIG.ANIMATION_DURATION);
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // ABSTAIN
+    // ─────────────────────────────────────────────────────────────
+
+    /**
+     * Initialize abstain modal interactions
+     */
+    initAbstainModal() {
+        const modal      = document.getElementById('abstain-modal');
+        const cancelBtn  = document.getElementById('abstain-cancel-btn');
+        const abstainForm = document.getElementById('abstain-form');
+
+        if (!modal) return;
+
+        // Open from both top and bottom buttons
+        ['abstain-btn-top', 'abstain-btn-bottom'].forEach(id => {
+            document.getElementById(id)?.addEventListener('click', () => {
+                modal.classList.remove('hidden');
+                modal.classList.add('animate-fade-in');
+                this.trapFocus(modal);
+                this.announce('Abstain confirmation dialog opened. Are you sure you want to abstain from voting?');
+            });
+        });
+
+        // Close modal helper
+        const closeAbstainModal = () => {
+            modal.classList.add('animate-fade-out');
+            setTimeout(() => {
+                modal.classList.add('hidden');
+                modal.classList.remove('animate-fade-in', 'animate-fade-out');
+            }, VotingSystem.CONFIG.ANIMATION_DURATION);
+        };
+
+        // Cancel button
+        cancelBtn?.addEventListener('click', closeAbstainModal);
+
+        // Click outside backdrop to close
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) closeAbstainModal();
+        });
+
+        // ESC to close (only when abstain modal is open)
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && !modal.classList.contains('hidden')) {
+                e.stopImmediatePropagation();
+                closeAbstainModal();
+            }
+        });
+
+        // Suppress beforeunload warning when genuinely submitting abstain
+        abstainForm?.addEventListener('submit', () => {
+            this.state.isSubmitting = true;
+            window.removeEventListener('beforeunload', this.beforeUnloadHandler);
+        });
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -899,6 +956,22 @@ style.textContent = `
 
     /* Profile modal body smooth scale-in */
     #profile-modal > div   { animation: scale-in 0.25s cubic-bezier(0.34, 1.56, 0.64, 1); }
+
+    /* Abstain modal scale-in */
+    #abstain-modal > div   { animation: scale-in 0.25s cubic-bezier(0.34, 1.56, 0.64, 1); }
+
+    /* Registration success modal */
+    @keyframes popIn {
+        from { transform: scale(0.4); opacity: 0; }
+        to   { transform: scale(1);   opacity: 1; }
+    }
+    @keyframes registeredFadeOut {
+        from { opacity: 1; }
+        to   { opacity: 0; }
+    }
+    .registered-modal-inner    { animation: scale-in 0.3s cubic-bezier(0.34, 1.56, 0.64, 1); }
+    .registered-checkmark      { animation: popIn 0.38s cubic-bezier(0.34, 1.56, 0.64, 1) 0.15s both; }
+    .registered-modal-fade-out { animation: registeredFadeOut 0.3s ease forwards; }
 
     /* Smooth transitions */
     .candidate-card, .position-status, button { transition: all 0.2s ease; }

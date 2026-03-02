@@ -1,6 +1,6 @@
 @extends('layouts.app')
 
-@section('title', 'Select Branch - Voting System')
+@section('title', 'Select Branch - Registration System')
 
 @section('content')
 <div class="max-w-4xl mx-auto">
@@ -35,7 +35,7 @@
 
         <!-- Header -->
         <div class="bg-gradient-to-r from-blue-600 to-blue-800 px-6 py-8 text-white">
-            <h2 class="text-3xl font-bold mb-2">Welcome to Online Voting</h2>
+            <h2 class="text-3xl font-bold mb-2">Welcome to Online Registration</h2>
             <p class="text-blue-100">Please select your branch and search for your name to begin</p>
         </div>
 

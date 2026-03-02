@@ -49,7 +49,7 @@
     </div>
 
     {{-- Instructions --}}
-    <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6" role="alert">
+    <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4" role="alert">
         <div class="flex items-start">
             <svg class="w-6 h-6 text-yellow-600 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
                 <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/>
@@ -66,6 +66,9 @@
             </div>
         </div>
     </div>
+
+    {{-- Abstain Button (Top) --}}
+
 
     {{-- Voting Form --}}
     <form method="POST" action="{{ route('voting.submit-votes') }}" id="voting-form" novalidate>
@@ -205,7 +208,19 @@
                             You must vote for at least one candidate before submitting.
                         </p>
                     </div>
-                    <div class="w-full sm:w-auto">
+                    <div class="w-full sm:w-auto flex flex-col sm:flex-row gap-3">
+                        {{-- Abstain Button (Bottom) --}}
+                        {{-- <button type="button"
+                            id="abstain-btn-bottom"
+                            class="w-full sm:w-auto inline-flex items-center justify-center px-5 py-3 border border-red-300 text-red-600 bg-white hover:bg-red-50 font-medium rounded-md text-base transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-400"
+                            aria-label="I will not vote at this time">
+                            <svg class="w-4 h-4 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"/>
+                            </svg>
+                            I will not vote at this time
+                        </button> --}}
+
+                        {{-- Submit Button --}}
                         <button type="button"
                             id="review-btn"
                             disabled
@@ -222,6 +237,97 @@
         @endif
     </form>
 </div>
+
+{{-- ─── Registration Success Modal (auto-opens when coming from update-info) ── --}}
+@if(session('success'))
+<div id="registered-modal"
+    class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="registered-modal-title">
+
+    <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden registered-modal-inner">
+
+        {{-- Top green accent bar --}}
+        <div class="h-2 bg-gradient-to-r from-green-400 to-green-600"></div>
+
+        {{-- Body --}}
+        <div class="px-8 py-8 text-center">
+
+            {{-- Animated checkmark --}}
+            <div class="flex items-center justify-center mb-5">
+                <div class="w-20 h-20 rounded-full bg-green-100 flex items-center justify-center registered-checkmark">
+                    <svg class="w-10 h-10 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/>
+                    </svg>
+                </div>
+            </div>
+
+            {{-- Heading --}}
+            <h2 id="registered-modal-title" class="text-2xl font-bold text-gray-900 mb-2">
+                You are now registered!
+            </h2>
+
+            {{-- Message --}}
+            <p class="text-gray-500 text-sm mb-1">
+                Your information has been successfully saved.
+            </p>
+            <p class="text-gray-700 font-semibold text-base mb-6">
+                Please proceed to cast your vote.
+            </p>
+
+            {{-- Member name badge --}}
+            <div class="bg-green-50 border border-green-200 rounded-xl px-4 py-3 mb-7 text-left">
+                <p class="text-xs text-green-600 uppercase tracking-widest font-bold mb-1">Voting as</p>
+                <p class="text-green-900 font-bold text-base leading-tight">{{ Str::upper($member->full_name) }}</p>
+            </div>
+
+            {{-- Proceed button --}}
+            <button type="button"
+                id="registered-modal-proceed-btn"
+                class="w-full inline-flex items-center justify-center gap-2 px-8 py-3.5 bg-green-600 hover:bg-green-700 active:bg-green-800 text-white font-bold text-base rounded-xl transition-colors focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 shadow-md">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                </svg>
+                Proceed to Cast My Vote
+            </button>
+
+            {{-- Divider --}}
+            <div class="mt-2 pt-2 border-gray-200">
+                <form method="POST"
+                    action="{{ route('voting.abstain') }}"
+                    id="registered-modal-abstain-form">
+                    @csrf
+
+                    <button type="submit"
+                            id="registered-modal-abstain-btn"
+                            class="w-full inline-flex items-center justify-center gap-2 px-6 py-3
+                                border border-red-300 text-red-600 bg-white
+                                hover:bg-red-50 active:bg-red-100
+                                font-semibold text-sm rounded-xl
+                                transition-all duration-200 ease-in-out
+                                focus:outline-none focus:ring-2 focus:ring-red-400 focus:ring-offset-2">
+
+                        <svg class="w-4 h-4 flex-shrink-0"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                            aria-hidden="true">
+                            <path stroke-linecap="round"
+                                stroke-linejoin="round"
+                                stroke-width="2"
+                                d="M6 18L18 6M6 6l12 12"/>
+                        </svg>
+
+                        Exit
+                    </button>
+                </form>
+            </div>
+
+        </div>
+    </div>
+</div>
+@endif
 
 {{-- Review Modal --}}
 <div id="review-modal"
@@ -268,8 +374,6 @@
     aria-modal="true"
     aria-labelledby="profile-modal-title">
     <div class="bg-white rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden">
-
-        {{-- Modal Header --}}
         <div class="bg-gradient-to-r from-blue-600 to-blue-800 px-6 py-5 flex items-center gap-4">
             <div id="profile-modal-avatar" class="flex-shrink-0"></div>
             <div class="flex-1 min-w-0">
@@ -285,8 +389,6 @@
                 </svg>
             </button>
         </div>
-
-        {{-- Modal Body --}}
         <div class="px-6 py-6 max-h-[60vh] overflow-y-auto">
             <div class="flex items-center gap-2 mb-4">
                 <div class="w-1 h-5 bg-blue-600 rounded-full"></div>
@@ -295,8 +397,6 @@
             <p id="profile-modal-body"
                 class="text-gray-800 text-base font-medium leading-relaxed whitespace-pre-line"></p>
         </div>
-
-        {{-- Modal Footer --}}
         <div class="bg-gray-50 px-6 py-4 flex justify-end border-t border-gray-100">
             <button type="button"
                 id="close-profile-modal-btn"
@@ -307,8 +407,83 @@
     </div>
 </div>
 
+{{-- Abstain Confirmation Modal --}}
+<div id="abstain-modal"
+    class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="abstain-modal-title">
+    <div class="bg-white rounded-lg shadow-2xl max-w-md w-full overflow-hidden">
+        <div class="bg-red-600 text-white px-6 py-4 flex items-center gap-3">
+            <svg class="w-6 h-6 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+            </svg>
+            <h3 id="abstain-modal-title" class="text-lg font-bold">Confirm Abstain</h3>
+        </div>
+        <div class="px-6 py-6">
+            <p class="text-gray-800 font-medium text-base">Are you sure you want to abstain from voting?</p>
+            <p class="text-gray-500 text-sm mt-3 leading-relaxed">
+                You will <strong class="text-gray-700">not</strong> cast any votes. Your session will be cleared
+                and you will be returned to the start. <strong class="text-red-600">This action cannot be undone.</strong>
+            </p>
+        </div>
+        <div class="bg-gray-50 px-6 py-4 flex flex-col-reverse sm:flex-row justify-end gap-3 border-t border-gray-100">
+            <button type="button"
+                id="abstain-cancel-btn"
+                class="w-full sm:w-auto px-6 py-2 border border-gray-300 rounded-md text-gray-700 bg-white hover:bg-gray-50 font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-400">
+                Go Back
+            </button>
+            <form method="POST" action="{{ route('voting.abstain') }}" id="abstain-form">
+                @csrf
+                <button type="submit"
+                    class="w-full sm:w-auto px-6 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500">
+                    Yes, I will not vote
+                </button>
+            </form>
+        </div>
+    </div>
+</div>
+
 @endsection
 
 @push('scripts')
 <script src="{{ asset('js/voting/ballot.js') }}"></script>
+
+@if(session('success'))
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const modal       = document.getElementById('registered-modal');
+    const proceedBtn  = document.getElementById('registered-modal-proceed-btn');
+    const abstainBtn  = document.getElementById('registered-modal-abstain-btn');
+    const abstainForm = document.getElementById('registered-modal-abstain-form');
+
+    if (!modal) return;
+
+    // Focus the proceed button immediately for keyboard users
+    proceedBtn?.focus();
+
+    // Dismiss modal and reveal the ballot
+    proceedBtn?.addEventListener('click', function () {
+        modal.classList.add('registered-modal-fade-out');
+        setTimeout(() => modal.remove(), 300);
+    });
+
+    // Abstain: confirm then submit
+    abstainBtn?.addEventListener('click', function () {
+        // if (confirm('Are you sure you want to abstain from voting?\n\nYour session will be cleared and you will be returned to the start. This cannot be undone.')) {
+        if (confirm('Your session will be cleared and you will be returned to the start.')) {
+            abstainBtn.disabled = true;
+            abstainBtn.innerHTML = `
+                <svg class="animate-spin w-4 h-4 mr-2 flex-shrink-0" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                </svg>
+                Processing...
+            `;
+            abstainForm.submit();
+        }
+    });
+});
+</script>
+@endif
 @endpush

@@ -135,10 +135,6 @@ class MembersImport implements ToCollection, WithHeadingRow, WithChunkReading
                         'share_account',
                         'is_migs',
                         'share_amount',
-                        'is_active',
-                        'is_registered',
-                        'process_type',
-                        'updated_at',
                     ]
                 );
             }
