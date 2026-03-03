@@ -100,7 +100,10 @@ class VotingController extends Controller
             ]);
 
         } catch (\Exception $e) {
-            Log::error('Member search error', ['error' => $e->getMessage(), 'ip' => $request->ip()]);
+            Log::error('Member search error', [
+                'error' => $e->getMessage(),
+                'ip' => $request->ip()
+            ]);
 
             return response()->json([
                 'success' => false,
@@ -179,30 +182,18 @@ class VotingController extends Controller
         $shareAccountLast4 = substr(str_replace('-', '', $member->share_account), -4);
 
         if ($shareAccountLast4 !== $request->share_account_last4) {
-            Log::warning('Failed verification - share account', [
-                'member_code' => $member->code,
-                'ip'          => $request->ip(),
-            ]);
-
             return back()->withInput($preservedInput)
                 ->withErrors(['share_account_last4' => 'The last 4 digits do not match our records. Please try again.']);
         }
 
         // Verify at least one security question passes
         if (!$this->verifySecurityQuestions($request, $member)) {
-            Log::warning('Failed verification - security questions', [
-                'member_code' => $member->code,
-                'fields'      => ['middle_name' => $request->filled('middle_name'), 'birth_date' => $request->filled('birth_date')],
-                'ip'          => $request->ip(),
-            ]);
-
             return back()->withInput($preservedInput)
                 ->withErrors(['verification' => 'The information provided does not match our records. Please check and try again.']);
         }
 
         // Check if already voted
         if ($this->memberHasVoted($member)) {
-            // Store identifiers before clearing so already-voted page can verify
             Session::put(self::SESSION_MEMBER_CODE, $member->code);
             Session::put(self::SESSION_BRANCH_NUMBER, $member->branch_number);
             $this->clearSessionForAlreadyVoted();
@@ -213,8 +204,6 @@ class VotingController extends Controller
         // Mark session as verified
         Session::put(self::SESSION_VERIFIED, true);
         Session::put(self::SESSION_VERIFIED_AT, now());
-
-        Log::info('Member verification successful', ['member_code' => $member->code, 'ip' => $request->ip()]);
 
         return redirect()->route('voting.update-info');
     }
@@ -271,8 +260,6 @@ class VotingController extends Controller
                 'registration_type' => 'Online',
             ]);
 
-            Log::info('Member information updated', ['member_code' => $member->code, 'ip' => $request->ip()]);
-
             // Check eligibility (MIGS, share amount, already voted)
             if ($redirect = $this->checkVotingEligibility($member, $request->ip())) {
                 return $redirect;
@@ -286,13 +273,19 @@ class VotingController extends Controller
                 ->with('success', 'Information updated successfully. You may now cast your vote.');
 
         } catch (ModelNotFoundException $e) {
-            Log::error('Update info: Member not found', ['error' => $e->getMessage(), 'ip' => $request->ip()]);
+            Log::error('Update info: Member not found', [
+                'error' => $e->getMessage(),
+                'ip' => $request->ip()
+            ]);
 
             return redirect()->route('voting.select-branch')
                 ->withErrors(['error' => 'Member not found. Please start again.']);
 
         } catch (\Exception $e) {
-            Log::error('Update info error', ['error' => $e->getMessage(), 'ip' => $request->ip()]);
+            Log::error('Update info error', [
+                'error' => $e->getMessage(),
+                'ip' => $request->ip()
+            ]);
 
             return back()->withInput()
                 ->withErrors(['error' => 'Failed to update information. Please try again.']);
@@ -303,7 +296,6 @@ class VotingController extends Controller
 
     public function notQualified()
     {
-        // Must have a reason flashed from checkVotingEligibility
         if (!session('reason')) {
             return redirect()->route('voting.select-branch');
         }
@@ -334,8 +326,6 @@ class VotingController extends Controller
                 ->get();
 
             if ($positions->isEmpty()) {
-                Log::warning('No active positions available', ['member_code' => $member->code, 'ip' => request()->ip()]);
-
                 return redirect()->route('voting.select-branch')
                     ->with('warning', 'No active positions available for voting at this time. Please contact the administrator.');
             }
@@ -343,24 +333,23 @@ class VotingController extends Controller
             Session::put(self::SESSION_MEMBER_CODE, $member->code);
             Session::put(self::SESSION_BRANCH_NUMBER, $member->branch_number);
 
-            Log::info('Member accessed ballot', [
-                'member_code'       => $member->code,
-                'positions_count'   => $positions->count(),
-                'total_candidates'  => $positions->sum(fn($p) => $p->candidates->count()),
-                'ip'                => request()->ip(),
-            ]);
-
             return view('voting.ballot', compact('member', 'positions'));
 
         } catch (ModelNotFoundException $e) {
-            Log::error('Ballot: Member or branch not found', ['error' => $e->getMessage(), 'ip' => request()->ip()]);
+            Log::error('Ballot: Member or branch not found', [
+                'error' => $e->getMessage(),
+                'ip' => request()->ip()
+            ]);
             Session::flush();
 
             return redirect()->route('voting.select-branch')
                 ->withErrors(['error' => 'Member or branch not found. Please start again.']);
 
         } catch (\Exception $e) {
-            Log::error('Ballot access error', ['error' => $e->getMessage(), 'ip' => request()->ip()]);
+            Log::error('Ballot access error', [
+                'error' => $e->getMessage(),
+                'ip' => request()->ip()
+            ]);
 
             return redirect()->route('voting.select-branch')
                 ->withErrors(['error' => 'An error occurred. Please try again.']);
@@ -389,7 +378,6 @@ class VotingController extends Controller
 
             if ($this->memberHasVoted($member)) {
                 DB::rollBack();
-                // Preserve identifiers before clearing so already-voted page can verify
                 Session::put(self::SESSION_MEMBER_CODE, $member->code);
                 Session::put(self::SESSION_BRANCH_NUMBER, $member->branch_number);
                 $this->clearSessionForAlreadyVoted();
@@ -413,14 +401,6 @@ class VotingController extends Controller
 
             DB::commit();
 
-            Log::info('Votes submitted successfully', [
-                'member_code'    => $member->code,
-                'branch_number'  => $member->branch_number,
-                'control_number' => $controlNumber,
-                'total_votes'    => count($votesData),
-                'ip'             => $request->ip(),
-            ]);
-
             Session::put(self::SESSION_CONTROL_NUM, $controlNumber);
             Session::put(self::SESSION_VOTES_DONE, true);
 
@@ -433,7 +413,10 @@ class VotingController extends Controller
         } catch (\Exception $e) {
             DB::rollBack();
 
-            Log::error('Vote submission error', ['error' => $e->getMessage(), 'ip' => $request->ip()]);
+            Log::error('Vote submission error', [
+                'error' => $e->getMessage(),
+                'ip' => $request->ip()
+            ]);
 
             return back()->withErrors(['error' => 'Failed to submit votes. Please try again.']);
         }
@@ -446,22 +429,6 @@ class VotingController extends Controller
         if (!$this->isVerifiedSession()) {
             return redirect()->route('voting.select-branch')
                 ->withErrors(['session' => 'Session expired. Please start again.']);
-        }
-
-        try {
-            $member = $this->getSessionMember();
-
-            Log::info('Member chose to abstain', [
-                'member_code'   => $member->code,
-                'branch_number' => $member->branch_number,
-                'ip'            => $request->ip(),
-            ]);
-
-        } catch (\Exception $e) {
-            Log::warning('Abstain: could not resolve member from session', [
-                'error' => $e->getMessage(),
-                'ip'    => $request->ip(),
-            ]);
         }
 
         $this->clearFullSession();
@@ -504,7 +471,10 @@ class VotingController extends Controller
             return view('voting.confirmation', compact('member', 'branch', 'controlNumber', 'votes'));
 
         } catch (\Exception $e) {
-            Log::error('Confirmation error', ['error' => $e->getMessage(), 'ip' => request()->ip()]);
+            Log::error('Confirmation error', [
+                'error' => $e->getMessage(),
+                'ip' => request()->ip()
+            ]);
 
             return redirect()->route('voting.select-branch')
                 ->withErrors(['error' => 'An error occurred. Please try again.']);
@@ -526,15 +496,16 @@ class VotingController extends Controller
             $votes         = $this->getGroupedVotes($member, $controlNumber);
             $pdfPath       = $this->generateReceiptPDF($member, $branch, $controlNumber, $votes);
 
-            Log::info('Receipt downloaded', ['member_code' => $member->code, 'control_number' => $controlNumber, 'ip' => request()->ip()]);
-
             $this->clearFullSession();
 
             return response()->download($pdfPath, "voting_receipt_{$controlNumber}.pdf")
                 ->deleteFileAfterSend(true);
 
         } catch (\Exception $e) {
-            Log::error('Receipt download error', ['error' => $e->getMessage(), 'ip' => request()->ip()]);
+            Log::error('Receipt download error', [
+                'error' => $e->getMessage(),
+                'ip' => request()->ip()
+            ]);
 
             return back()->withErrors(['error' => 'Failed to generate receipt. Please contact support.']);
         }
@@ -551,7 +522,6 @@ class VotingController extends Controller
             return redirect()->route('voting.select-branch');
         }
 
-        // Confirm the member genuinely has votes on record
         $hasVoted = Vote::where('member_code', $memberCode)
             ->where('branch_number', $branchNumber)
             ->exists();
@@ -560,7 +530,6 @@ class VotingController extends Controller
             return redirect()->route('voting.select-branch');
         }
 
-        // Clean up remaining session data now that we've confirmed and are displaying the page
         $this->clearFullSession();
 
         return view('voting.already-voted');
@@ -570,9 +539,6 @@ class VotingController extends Controller
     // PRIVATE HELPERS
     // =========================================================================
 
-    /**
-     * Resolve branch and member from session, with redirect on failure.
-     */
     private function resolveSessionBranchAndMember(Request $request): array
     {
         $branchId = Session::get(self::SESSION_BRANCH_ID);
@@ -588,31 +554,25 @@ class VotingController extends Controller
 
             return [$branch, $member];
         } catch (\Exception $e) {
-            Log::error('Failed to resolve session branch/member', ['error' => $e->getMessage(), 'ip' => $request->ip()]);
+            Log::error('Failed to resolve session branch/member', [
+                'error' => $e->getMessage(),
+                'ip' => $request->ip()
+            ]);
 
             return [null, null];
         }
     }
 
-    /**
-     * Get the authenticated member from session.
-     */
     private function getSessionMember(): Member
     {
         return Member::findOrFail(Session::get(self::SESSION_MEMBER_ID));
     }
 
-    /**
-     * Get the session branch.
-     */
     private function getSessionBranch(): Branch
     {
         return Branch::findOrFail(Session::get(self::SESSION_BRANCH_ID));
     }
 
-    /**
-     * Check if member has already voted.
-     */
     private function memberHasVoted(Member $member): bool
     {
         return Vote::where('member_code', $member->code)
@@ -620,10 +580,6 @@ class VotingController extends Controller
             ->exists();
     }
 
-    /**
-     * Verify security questions (middle name and/or birth date).
-     * Returns true if at least one provided answer is correct.
-     */
     private function verifySecurityQuestions(Request $request, Member $member): bool
     {
         if ($request->filled('middle_name') &&
@@ -639,33 +595,16 @@ class VotingController extends Controller
         return false;
     }
 
-    /**
-     * Check all voting eligibility rules.
-     * Returns a RedirectResponse if ineligible, or null if eligible.
-     *
-     * share_amount encoding:
-     *   1 = share amount is >= PHP 3,000.00 (eligible)
-     *   0 = share amount is <  PHP 3,000.00 (not eligible)
-     */
     private function checkVotingEligibility(Member $member, string $ip): ?RedirectResponse
     {
         if (!$member->is_migs) {
-            Log::warning('Non-MIGS member attempted to vote', ['member_code' => $member->code, 'ip' => $ip]);
-
             $this->clearFullSession();
 
             return redirect()->route('voting.not-qualified')
                 ->with('reason', 'Only MIGS (Member in Good Standing) can participate in voting.');
         }
 
-        // share_amount: 1 = >= PHP 3,000 (eligible), 0/null = below PHP 3,000 (ineligible)
         if (!$member->share_amount) {
-            Log::warning('Member with insufficient shares attempted to vote', [
-                'member_code'  => $member->code,
-                'share_amount' => $member->share_amount,
-                'ip'           => $ip,
-            ]);
-
             $this->clearFullSession();
 
             return redirect()->route('voting.not-qualified')
@@ -673,9 +612,6 @@ class VotingController extends Controller
         }
 
         if ($this->memberHasVoted($member)) {
-            Log::info('Already-voted member attempted to proceed', ['member_code' => $member->code, 'ip' => $ip]);
-
-            // Preserve identifiers before clearing so already-voted page can verify
             Session::put(self::SESSION_MEMBER_CODE, $member->code);
             Session::put(self::SESSION_BRANCH_NUMBER, $member->branch_number);
             $this->clearSessionForAlreadyVoted();
@@ -686,9 +622,6 @@ class VotingController extends Controller
         return null;
     }
 
-    /**
-     * Validate vote submission and build flat votes array.
-     */
     private function buildVotesData(array $votesInput): array
     {
         $votesData = [];
@@ -717,9 +650,6 @@ class VotingController extends Controller
         return $votesData;
     }
 
-    /**
-     * Retrieve votes grouped by position title.
-     */
     private function getGroupedVotes(Member $member, string $controlNumber)
     {
         return Vote::where('member_code', $member->code)
@@ -730,9 +660,6 @@ class VotingController extends Controller
             ->groupBy('candidate.position.title');
     }
 
-    /**
-     * Generate the PDF receipt and return file path.
-     */
     private function generateReceiptPDF(Member $member, Branch $branch, string $controlNumber, $votes): string
     {
         $votesArray = [];
@@ -770,17 +697,9 @@ class VotingController extends Controller
 
         $pdf->save($filepath);
 
-        Log::info('PDF receipt generated', [
-            'control_number' => $controlNumber,
-            'member_code'    => $member->code,
-        ]);
-
         return $filepath;
     }
 
-    /**
-     * Check if the current session is verified and not expired.
-     */
     private function isVerifiedSession(): bool
     {
         if (!Session::get(self::SESSION_VERIFIED)) {
@@ -798,10 +717,6 @@ class VotingController extends Controller
         return true;
     }
 
-    /**
-     * Clear only the sensitive/auth session keys, preserving member identifiers
-     * so the already-voted page can still verify the member before final cleanup.
-     */
     private function clearSessionForAlreadyVoted(): void
     {
         Session::put(self::SESSION_ALREADY_VOTED, true);
@@ -816,9 +731,6 @@ class VotingController extends Controller
         ]);
     }
 
-    /**
-     * Clear all voting session data (used after download or final cleanup).
-     */
     private function clearFullSession(): void
     {
         Session::forget([
