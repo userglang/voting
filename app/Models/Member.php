@@ -44,6 +44,7 @@ class Member extends Model
         'process_type',
         'registration_type',
         'membership_date',
+        'is_valid',
     ];
 
     // Attributes that should be cast to native types (useful for dates, booleans, etc.)
@@ -53,6 +54,7 @@ class Member extends Model
         'is_migs' => 'boolean',
         'is_active' => 'boolean',
         'is_registered' => 'boolean',
+        'is_valid' => 'boolean',
     ];
 
     /**

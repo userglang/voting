@@ -15,6 +15,7 @@ use Filament\Actions\ActionGroup;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Radio;
 use Filament\Forms\Components\Select;
+use Filament\Forms\Components\TimePicker;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Filament\Schemas\Components\Section;
@@ -75,25 +76,29 @@ class VoteResults extends Page
 
     /**
      * Apply standard vote filters to a query builder.
+     * All columns are fully qualified with the 'votes' table to avoid
+     * ambiguity when the query joins multiple tables (candidates, positions, votes).
      */
     protected function applyVoteFilters(\Illuminate\Database\Eloquent\Builder $query, array $data): \Illuminate\Database\Eloquent\Builder
     {
         if (!empty($data['branch_number'])) {
-            $query->where('branch_number', $data['branch_number']);
+            $query->where('votes.branch_number', $data['branch_number']);
         }
 
         match ($data['vote_type'] ?? 'all') {
-            'online'  => $query->where('online_vote', true),
-            'offline' => $query->where('online_vote', false),
+            'online'  => $query->where('votes.online_vote', true),
+            'offline' => $query->where('votes.online_vote', false),
             default   => null,
         };
 
         if (!empty($data['date_from'])) {
-            $query->whereDate('created_at', '>=', $data['date_from']);
+            $timeFrom = $data['time_from'] ?? '00:00';
+            $query->where('votes.created_at', '>=', $data['date_from'] . ' ' . $timeFrom . ':00');
         }
 
         if (!empty($data['date_to'])) {
-            $query->whereDate('created_at', '<=', $data['date_to']);
+            $timeTo = $data['time_to'] ?? '23:59';
+            $query->where('votes.created_at', '<=', $data['date_to'] . ' ' . $timeTo . ':59');
         }
 
         return $query;
@@ -124,8 +129,12 @@ class VoteResults extends Page
                 'offline' => 'Offline Votes Only',
                 default   => 'All Vote Types',
             },
-            'date_from' => $data['date_from'] ?? 'Beginning',
-            'date_to'   => $data['date_to'] ?? 'Present',
+            'date_from' => !empty($data['date_from'])
+                ? \Carbon\Carbon::parse($data['date_from'] . ' ' . ($data['time_from'] ?? '00:00'))->format('F d, Y g:i A')
+                : 'Beginning',
+            'date_to'   => !empty($data['date_to'])
+                ? \Carbon\Carbon::parse($data['date_to'] . ' ' . ($data['time_to'] ?? '23:59'))->format('F d, Y g:i A')
+                : 'Present',
         ];
     }
 
@@ -161,8 +170,24 @@ class VoteResults extends Page
         }
 
         if ($withDates) {
-            $fields[] = DatePicker::make('date_from')->label('Date From')->native(false);
-            $fields[] = DatePicker::make('date_to')->label('Date To')->native(false);
+            $fields[] = DatePicker::make('date_from')
+                ->label('Date From')
+                ->native(false)
+                ->default(now()->startOfWeek(\Carbon\Carbon::MONDAY)->toDateString());
+            $fields[] = TimePicker::make('time_from')
+                ->label('Time From')
+                ->native(false)
+                ->seconds(false)
+                ->default('00:00');
+            $fields[] = DatePicker::make('date_to')
+                ->label('Date To')
+                ->native(false)
+                ->default(now()->toDateString());
+            $fields[] = TimePicker::make('time_to')
+                ->label('Time To')
+                ->native(false)
+                ->seconds(false)
+                ->default('23:59');
         }
 
         return $fields;

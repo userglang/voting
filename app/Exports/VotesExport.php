@@ -93,7 +93,7 @@ class VotesExport implements
     {
         return [
             $vote->id,
-            str_pad($vote->control_number, 6, '0', STR_PAD_LEFT),
+            $vote->control_number,
             $vote->branch_number ?? 'N/A',
             $vote->branch?->branch_name ?? 'N/A',
             $vote->member_code ?? 'N/A',

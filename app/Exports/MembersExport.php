@@ -49,7 +49,7 @@ class MembersExport implements
                 'occupation', 'share_account', 'share_amount',
                 'is_migs', 'is_active', 'is_registered',
                 'process_type', 'registration_type', 'membership_date',
-                'updated_at',
+                'updated_at', 'is_valid',
             ])
             ->with([
                 'branch:id,branch_number,branch_name',
@@ -77,7 +77,7 @@ class MembersExport implements
             'Occupation', 'Share Account', 'Share Amount',
             'MIGS', 'Active', 'Registered',
             'Process Type', 'Registration Type', 'Membership Date',
-            'Registered Date', 'Registered Time',
+            'Registered Date', 'Registered Time', 'Is Valid',
         ];
     }
 
@@ -113,6 +113,7 @@ class MembersExport implements
             $m->membership_date?->format('Y-m-d')                 ?? 'N/A',
             $m->updated_at?->format('Y-m-d')                      ?? 'N/A',
             $m->updated_at?->format('H:i:s')                      ?? 'N/A',
+            $m->is_valid,
         ];
     }
 
@@ -137,7 +138,7 @@ class MembersExport implements
             'R' => 20, // Added TIN column width
             'S' => 20, 'T' => 15, 'U' => 15, 'V' => 8,
             'W' => 8,  'X' => 12, 'Y' => 25, 'Z' => 20,
-            'AA' => 18, 'AB' => 15, 'AC' => 15,
+            'AA' => 18, 'AB' => 15, 'AC' => 15, 'AD' => 8,
         ];
     }
 

@@ -78,12 +78,25 @@
         .no-vote-row td {
             color: #95a5a6;
         }
+        .datetime-label {
+            color: #2c3e50;
+        }
+        .time-note {
+            font-size: 10px;
+            color: #7f8c8d;
+            font-style: italic;
+        }
     </style>
 </head>
 <body>
 
     <h1>Votes Summary Report</h1>
-    <p><strong>Generated on:</strong> {{ now()->format('F d, Y - g:i A') }}</p>
+    <p>
+        <strong>Generated on:</strong>
+        <span class="datetime-label">{{ now()->format('F d, Y') }}</span>
+        &mdash;
+        <span class="datetime-label">{{ now()->format('g:i A') }}</span>
+    </p>
 
     <h2>Filter Information</h2>
     <table>
@@ -92,8 +105,14 @@
             <td><strong>Vote Type:</strong> {{ $filters['vote_type_label'] ?? 'All Types' }}</td>
         </tr>
         <tr>
-            <td><strong>Date From:</strong> {{ $filters['date_from'] ?? 'N/A' }}</td>
-            <td><strong>Date To:</strong> {{ $filters['date_to'] ?? 'N/A' }}</td>
+            <td>
+                <strong>Date &amp; Time From:</strong>
+                {{ $filters['date_from'] ?? 'Beginning' }}
+            </td>
+            <td>
+                <strong>Date &amp; Time To:</strong>
+                {{ $filters['date_to'] ?? 'Present' }}
+            </td>
         </tr>
         <tr>
             <td colspan="2"><strong>Total Positions:</strong> {{ $summary->count() }}</td>
@@ -185,7 +204,7 @@
 
     <div class="footer">
         <p><strong>Summary:</strong> {{ $summary->count() }} positions | {{ $totalCandidates }} candidates | {{ $totalVotes }} total votes</p>
-        <p>This report is generated automatically. All data is accurate as of {{ now()->format('F d, Y g:i A') }}.</p>
+        <p>This report is generated automatically. All data is accurate as of {{ now()->format('F d, Y') }} at {{ now()->format('g:i A') }}.</p>
         <p>&copy; {{ now()->year }} Voting System. All rights reserved.</p>
     </div>
 
