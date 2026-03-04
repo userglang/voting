@@ -106,7 +106,7 @@
                 <select id="marital_status" name="marital_status" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 @error('marital_status') border-red-300 @enderror">
                     <option value="single" {{ old('marital_status', $member->marital_status) == 'Single' ? 'selected' : '' }}>Single</option>
                     <option value="married" {{ old('marital_status', $member->marital_status) == 'Married' ? 'selected' : '' }}>Married</option>
-                    <option value="divorced" {{ old('marital_status', $member->marital_status) == 'Separated' ? 'selected' : '' }}>Separated</option>
+                    <option value="separated" {{ old('marital_status', $member->marital_status) == 'Separated' ? 'selected' : '' }}>Separated</option>
                     <option value="widowed" {{ old('marital_status', $member->marital_status) == 'Widowed' ? 'selected' : '' }}>Widowed</option>
                 </select>
                 @error('marital_status')

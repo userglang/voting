@@ -238,10 +238,10 @@ class VotingController extends Controller
         $request->validate([
             'tin'            => 'nullable|string|max:20',
             'address'        => 'required|string|max:255',
-            'email'          => 'nullable|email|max:100',
+            'email'          => 'nullable|email|max:100|unique:members,email',
             'contact_number' => 'required|string|max:20',
             'occupation'     => 'nullable|string|max:100',
-            'marital_status' => 'required|string|in:single,married,divorced,widowed',
+            'marital_status' => 'required|string|in:single,married,separated,widowed',
             'religion'       => 'required|string|max:100',
         ]);
 
