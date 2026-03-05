@@ -59,7 +59,7 @@ class SummaryPage extends Page implements HasTable
      * Shared export filter form schema (reused across all export actions).
      * Accepts which optional fields to include.
      */
-    protected function exportFormSchema(bool $withStatus = false, bool $withMigs = false, bool $withRegistration = false, bool $withGender = false): array
+    protected function exportFormSchema(bool $withStatus = false, bool $withMigs = false, bool $withRegistration = false, bool $withGender = false, bool $withValid = false): array
     {
         $fields = [
             Select::make('branch_number')
@@ -102,6 +102,18 @@ class SummaryPage extends Page implements HasTable
                     'not_registered' => 'Not Registered Only',
                 ])
                 ->default('all')
+                ->inline();
+        }
+
+        if ($withValid) {
+            $fields[] = Radio::make('is_valid')
+                ->label('Validity Status')
+                ->options([
+                    'valid'   => 'Valid Only',
+                    'invalid' => 'Invalid Only',
+                    'all'     => 'All Members',
+                ])
+                ->default('valid')
                 ->inline();
         }
 
@@ -148,6 +160,12 @@ class SummaryPage extends Page implements HasTable
             default          => null,
         };
 
+        match ($data['is_valid'] ?? 'all') {
+            'valid'   => $query->where('is_valid', true),
+            'invalid' => $query->where('is_valid', false),
+            default   => null,
+        };
+
         if (!empty($data['gender'])) {
             $query->where('gender', $data['gender']);
         }
@@ -188,7 +206,7 @@ class SummaryPage extends Page implements HasTable
                     ->form([
                         Section::make('Export Filters')
                             ->description('Filter the summary data')
-                            ->schema($this->exportFormSchema())
+                            ->schema($this->exportFormSchema(withValid: true))
                             ->columns(1),
                     ])
                     ->action(function (array $data) {
@@ -209,7 +227,7 @@ class SummaryPage extends Page implements HasTable
                     ->form([
                         Section::make('Export Filters')
                             ->description('Filter the summary data')
-                            ->schema($this->exportFormSchema())
+                            ->schema($this->exportFormSchema(withValid: true))
                             ->columns(1),
                     ])
                     ->action(function (array $data) {
@@ -221,7 +239,16 @@ class SummaryPage extends Page implements HasTable
 
                             $branchNumbers = $branches->pluck('branch_number');
 
-                            $memberStats = Member::whereIn('branch_number', $branchNumbers)
+                            $memberQuery = Member::whereIn('branch_number', $branchNumbers);
+
+                            // Apply is_valid filter to the PDF summary member stats query
+                            // match ($data['is_valid'] ?? 'all') {
+                            //     'valid'   => $memberQuery->where('is_valid', true),
+                            //     'invalid' => $memberQuery->where('is_valid', false),
+                            //     default   => null,
+                            // };
+
+                            $memberStats = $memberQuery
                                 ->select([
                                     'branch_number',
                                     DB::raw('COUNT(*) as total_members'),
@@ -234,7 +261,15 @@ class SummaryPage extends Page implements HasTable
                                 ->get()
                                 ->keyBy('branch_number');
 
-                            $voteCounts = Vote::whereIn('branch_number', $branchNumbers)
+                            $voteQuery = Vote::whereIn('branch_number', $branchNumbers);
+
+                            match ($data['is_valid'] ?? 'all') {
+                                'valid'   => $voteQuery->where('is_valid', true),
+                                'invalid' => $voteQuery->where('is_valid', false),
+                                default   => null,
+                            };
+
+                            $voteCounts = $voteQuery
                                 ->select('branch_number', DB::raw('COUNT(*) as total_casted_votes'))
                                 ->groupBy('branch_number')
                                 ->pluck('total_casted_votes', 'branch_number');

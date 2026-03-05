@@ -91,6 +91,13 @@ class VoteResults extends Page
             default   => null,
         };
 
+        // is_valid filter — only valid votes when set to 'valid'
+        match ($data['is_valid'] ?? 'all') {
+            'valid'   => $query->where('votes.is_valid', true),
+            'invalid' => $query->where('votes.is_valid', false),
+            default   => null,
+        };
+
         if (!empty($data['date_from'])) {
             $timeFrom = $data['time_from'] ?? '00:00';
             $query->where('votes.created_at', '>=', $data['date_from'] . ' ' . $timeFrom . ':00');
@@ -123,11 +130,16 @@ class VoteResults extends Page
     protected function buildFilterLabels(array $data): array
     {
         return [
-            'branch_name'     => $this->resolveBranchName($data['branch_number'] ?? null),
-            'vote_type_label' => match ($data['vote_type'] ?? 'all') {
+            'branch_name'      => $this->resolveBranchName($data['branch_number'] ?? null),
+            'vote_type_label'  => match ($data['vote_type'] ?? 'all') {
                 'online'  => 'Online Votes Only',
                 'offline' => 'Offline Votes Only',
                 default   => 'All Vote Types',
+            },
+            'is_valid_label'   => match ($data['is_valid'] ?? 'all') {
+                'valid'   => 'Valid Votes Only',
+                'invalid' => 'Invalid Votes Only',
+                default   => 'All Votes',
             },
             'date_from' => !empty($data['date_from'])
                 ? \Carbon\Carbon::parse($data['date_from'] . ' ' . ($data['time_from'] ?? '00:00'))->format('F d, Y g:i A')
@@ -158,6 +170,16 @@ class VoteResults extends Page
                     'offline' => 'Offline Votes Only',
                 ])
                 ->default('all')
+                ->inline(),
+
+            Radio::make('is_valid')
+                ->label('Validity')
+                ->options([
+                    'valid'   => 'Valid Votes Only',
+                    'invalid' => 'Invalid Votes Only',
+                    'all'     => 'All Votes',
+                ])
+                ->default('valid')
                 ->inline(),
         ];
 
@@ -367,7 +389,7 @@ class VoteResults extends Page
             ->when($this->filterPosition, fn ($q) => $q->where('id', $this->filterPosition))
             ->orderBy('priority')
             ->with(['candidates' => function ($q) {
-                $q->withCount('votes')
+                $q->withCount(['votes' => fn ($q) => $q->where('is_valid', true)])
                     ->when($this->search, fn ($q) =>
                         $q->where(fn ($inner) =>
                             $inner->where('first_name',   'like', "%{$this->search}%")
@@ -386,8 +408,9 @@ class VoteResults extends Page
             ->values()
             ->all();
 
-        // Step 3: Single query — online/offline vote counts for all candidates.
+        // Step 3: Single query — online/offline valid vote counts for all candidates.
         $voteSplits = Vote::whereIn('candidate_id', $candidateIds)
+            ->where('is_valid', true)
             ->select([
                 'candidate_id',
                 DB::raw('SUM(CASE WHEN online_vote = 1 THEN 1 ELSE 0 END) as online_votes'),

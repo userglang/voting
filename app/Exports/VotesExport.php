@@ -12,9 +12,7 @@ use Maatwebsite\Excel\Concerns\WithTitle;
 use Maatwebsite\Excel\Concerns\ShouldAutoSize;
 use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 use PhpOffice\PhpSpreadsheet\Style\Fill;
-use PhpOffice\PhpSpreadsheet\Style\Color;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
-use Illuminate\Contracts\Queue\ShouldQueue;
 
 class VotesExport implements
     FromQuery,
@@ -38,18 +36,24 @@ class VotesExport implements
             ->with(['member', 'candidate.position', 'branch'])
             ->orderBy('created_at', 'desc');
 
-        // Apply filters
         if (!empty($this->filters['branch_number'])) {
             $query->where('branch_number', $this->filters['branch_number']);
         }
 
-        if (!empty($this->filters['vote_type'])) {
-            if ($this->filters['vote_type'] === 'online') {
-                $query->where('online_vote', true);
-            } elseif ($this->filters['vote_type'] === 'offline') {
-                $query->where('online_vote', false);
-            }
-        }
+        match ($this->filters['vote_type'] ?? 'all') {
+            'online'  => $query->where('online_vote', true),
+            'offline' => $query->where('online_vote', false),
+            default   => null,
+        };
+
+        // is_valid = true  → valid votes only
+        // is_valid = false → invalid votes only
+        // is_valid = all   → no filter
+        match ($this->filters['is_valid'] ?? 'all') {
+            'valid'   => $query->where('is_valid', true),
+            'invalid' => $query->where('is_valid', false),
+            default   => null,
+        };
 
         if (!empty($this->filters['position_id'])) {
             $query->whereHas('candidate', function ($q) {
@@ -58,11 +62,13 @@ class VotesExport implements
         }
 
         if (!empty($this->filters['date_from'])) {
-            $query->whereDate('created_at', '>=', $this->filters['date_from']);
+            $timeFrom = $this->filters['time_from'] ?? '00:00';
+            $query->where('created_at', '>=', $this->filters['date_from'] . ' ' . $timeFrom . ':00');
         }
 
         if (!empty($this->filters['date_to'])) {
-            $query->whereDate('created_at', '<=', $this->filters['date_to']);
+            $timeTo = $this->filters['time_to'] ?? '23:59';
+            $query->where('created_at', '<=', $this->filters['date_to'] . ' ' . $timeTo . ':59');
         }
 
         return $query;
@@ -75,6 +81,7 @@ class VotesExport implements
             'Control Number',
             'Branch Number',
             'Branch Name',
+            'Branch ID',
             'Member Code',
             'Member Complete Name',
             'Last Name',
@@ -84,6 +91,7 @@ class VotesExport implements
             'Candidate Name',
             'Position',
             'Vote Type',
+            'Valid',
             'Date Cast',
             'Time Cast',
         ];
@@ -94,17 +102,19 @@ class VotesExport implements
         return [
             $vote->id,
             $vote->control_number,
-            $vote->branch_number ?? 'N/A',
-            $vote->branch?->branch_name ?? 'N/A',
-            $vote->member_code ?? 'N/A',
-            $vote->member?->full_name ?? 'N/A',
-            $vote->member?->last_name ?? 'N/A',
-            $vote->member?->first_name ?? 'N/A',
-            $vote->member?->middle_name ?? 'N/A',
-            $vote->candidate_id ?? 'N/A',
-            $vote->candidate?->full_name ?? 'N/A',
+            $vote->branch_number          ?? 'N/A',
+            $vote->branch?->branch_name   ?? 'N/A',
+            $vote->branch?->id            ?? 'N/A',
+            $vote->member_code            ?? 'N/A',
+            $vote->member?->full_name     ?? 'N/A',
+            $vote->member?->last_name     ?? 'N/A',
+            $vote->member?->first_name    ?? 'N/A',
+            $vote->member?->middle_name   ?? 'N/A',
+            $vote->candidate_id           ?? 'N/A',
+            $vote->candidate?->first_name  . ' ' .  $vote->candidate?->last_name ?? 'N/A',
             $vote->candidate?->position?->title ?? 'N/A',
-            $vote->online_vote ? '0' : '1',
+            $vote->online_vote ? 'Online' : 'Offline',
+            $vote->is_valid    ? 'Yes'    : 'No',
             $vote->created_at?->format('Y-m-d') ?? 'N/A',
             $vote->created_at?->format('H:i:s') ?? 'N/A',
         ];
@@ -115,17 +125,17 @@ class VotesExport implements
         return [
             1 => [
                 'font' => [
-                    'bold' => true,
+                    'bold'  => true,
                     'color' => ['rgb' => 'FFFFFF'],
-                    'size' => 12,
+                    'size'  => 12,
                 ],
                 'fill' => [
-                    'fillType' => Fill::FILL_SOLID,
+                    'fillType'   => Fill::FILL_SOLID,
                     'startColor' => ['rgb' => '4F46E5'],
                 ],
                 'alignment' => [
                     'horizontal' => Alignment::HORIZONTAL_CENTER,
-                    'vertical' => Alignment::VERTICAL_CENTER,
+                    'vertical'   => Alignment::VERTICAL_CENTER,
                 ],
             ],
         ];
@@ -134,21 +144,23 @@ class VotesExport implements
     public function columnWidths(): array
     {
         return [
-            'A' => 38,  // Candidate ID (UUID)
+            'A' => 38,  // ID (UUID)
             'B' => 18,  // Control Number
             'C' => 18,  // Branch Number
             'D' => 30,  // Branch Name
-            'E' => 15,  // Member Code
-            'F' => 35,  // Member Complete Name
-            'G' => 20,  // Last Name
-            'H' => 20,  // First Name
-            'I' => 20,  // Middle Name
-            'J' => 38,  // Candidate ID (UUID)
-            'K' => 35,  // Candidate Name
-            'L' => 25,  // Position
-            'M' => 12,  // Vote Type
-            'N' => 15,  // Date Cast
-            'O' => 12,  // Time Cast
+            'E' => 38,  // Member Code
+            'F' => 15,  // Member Code
+            'G' => 35,  // Member Complete Name
+            'H' => 20,  // Last Name
+            'I' => 20,  // First Name
+            'J' => 20,  // Middle Name
+            'K' => 38,  // Candidate ID (UUID)
+            'L' => 35,  // Candidate Name
+            'M' => 25,  // Position
+            'N' => 12,  // Vote Type
+            'O' => 10,  // Valid
+            'P' => 15,  // Date Cast
+            'Q' => 12,  // Time Cast
         ];
     }
 

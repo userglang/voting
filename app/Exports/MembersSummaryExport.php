@@ -38,14 +38,22 @@ class MembersSummaryExport implements
 
         $branches = $query->orderBy('branch_name')->get();
 
-        $summary = $branches->map(function ($branch) {
+        $isValid = $this->filters['is_valid'] ?? 'all';
+
+        $summary = $branches->map(function ($branch) use ($isValid) {
             $memberQuery = Member::where('branch_number', $branch->branch_number);
+
+            // is_valid = false  → filter members to invalid only
+            // is_valid = true   → no member filter (export all members)
+            // is_valid = all    → no member filter
+            if ($isValid === 'invalid') {
+                $memberQuery->where('is_valid', false);
+            }
 
             $totalMembers = $memberQuery->count();
             $totalMigs = (clone $memberQuery)->where('is_migs', true)->count();
             $totalNonMigs = (clone $memberQuery)->where('is_migs', false)->count();
 
-            // Registered members
             $totalRegMigs = (clone $memberQuery)
                 ->where('is_migs', true)
                 ->where('is_registered', true)
@@ -56,23 +64,33 @@ class MembersSummaryExport implements
                 ->where('is_registered', true)
                 ->count();
 
-            // Calculate quorum percentage
             $quorumPercentage = $totalMigs > 0
                 ? ($totalRegMigs / $totalMigs) * 100
                 : 0;
 
-            // Total votes cast from this branch
-            $totalCastedVotes = Vote::where('branch_number', $branch->branch_number)->count();
+            // Votes filter:
+            // is_valid = true  → count only valid votes
+            // is_valid = false → count only invalid votes
+            // is_valid = all   → count all votes
+            $voteQuery = Vote::where('branch_number', $branch->branch_number);
+
+            match ($isValid) {
+                'valid'   => $voteQuery->where('is_valid', true),
+                'invalid' => $voteQuery->where('is_valid', false),
+                default   => null,
+            };
+
+            $totalCastedVotes = $voteQuery->count();
 
             return [
-                'branch' => $branch->branch_name,
-                'total_member' => $totalMembers,
-                'total_migs' => $totalMigs,
-                'total_non_migs' => $totalNonMigs,
-                'total_reg_migs' => $totalRegMigs,
-                'total_reg_non_migs' => $totalRegNonMigs,
-                'quorum_percentage' => number_format($quorumPercentage, 2) . ' %',
-                'total_casted_votes' => $totalCastedVotes,
+                'branch'              => $branch->branch_name,
+                'total_member'        => $totalMembers,
+                'total_migs'          => $totalMigs,
+                'total_non_migs'      => $totalNonMigs,
+                'total_reg_migs'      => $totalRegMigs,
+                'total_reg_non_migs'  => $totalRegNonMigs,
+                'quorum_percentage'   => number_format($quorumPercentage, 2) . ' %',
+                'total_casted_votes'  => $totalCastedVotes,
             ];
         });
 
@@ -98,17 +116,17 @@ class MembersSummaryExport implements
         return [
             1 => [
                 'font' => [
-                    'bold' => true,
+                    'bold'  => true,
                     'color' => ['rgb' => 'FFFFFF'],
-                    'size' => 12,
+                    'size'  => 12,
                 ],
                 'fill' => [
-                    'fillType' => Fill::FILL_SOLID,
+                    'fillType'   => Fill::FILL_SOLID,
                     'startColor' => ['rgb' => '3B82F6'],
                 ],
                 'alignment' => [
                     'horizontal' => Alignment::HORIZONTAL_CENTER,
-                    'vertical' => Alignment::VERTICAL_CENTER,
+                    'vertical'   => Alignment::VERTICAL_CENTER,
                 ],
             ],
         ];
