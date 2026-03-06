@@ -278,29 +278,61 @@ class VoteResults extends Page
                     ])
                     ->action(function (array $data) {
                         try {
-                            // Aggregate in SQL — avoids loading all votes into memory
-                            // Using Candidate as base with leftJoin to include zero-vote candidates
-                            $voteAgg = $this->applyVoteFilters(
-                                Candidate::query()
-                                    ->join('positions', 'candidates.position_id', '=', 'positions.id')
-                                    ->leftJoin('votes', 'votes.candidate_id', '=', 'candidates.id')
-                                    ->select([
-                                        'positions.id as position_id',
-                                        'positions.title as position_title',
-                                        'positions.vacant_count',
-                                        'candidates.id as candidate_id',
-                                        DB::raw('candidates.first_name'),
-                                        DB::raw('candidates.last_name'),
-                                        DB::raw('COUNT(votes.id) as total'),
-                                        DB::raw('SUM(CASE WHEN votes.online_vote = 1 THEN 1 ELSE 0 END) as online'),
-                                        DB::raw('SUM(CASE WHEN votes.online_vote = 0 AND votes.id IS NOT NULL THEN 1 ELSE 0 END) as offline'),
-                                    ])
-                                    ->groupBy(
-                                        'positions.id', 'positions.title', 'positions.vacant_count',
-                                        'candidates.id', 'candidates.first_name', 'candidates.last_name'
-                                    ),
-                                $data
-                            )->get();
+                            // Build a deduplicated votes subquery with filters baked in,
+                            // so candidates with zero votes are still included (true LEFT JOIN)
+                            // and duplicate vote rows can never inflate the counts.
+                            $voteJoin = DB::table('votes')
+                                ->select('id', 'candidate_id', 'online_vote')  // only what the JOIN needs
+                                ->distinct();                                   // deduplicate before joining
+
+                            match ($data['is_valid'] ?? 'valid') {
+                                'valid'   => $voteJoin->where('is_valid', true),
+                                'invalid' => $voteJoin->where('is_valid', false),
+                                default   => null,
+                            };
+
+                            if (!empty($data['branch_number'])) {
+                                $voteJoin->where('branch_number', $data['branch_number']);
+                            }
+
+                            match ($data['vote_type'] ?? 'all') {
+                                'online'  => $voteJoin->where('online_vote', true),
+                                'offline' => $voteJoin->where('online_vote', false),
+                                default   => null,
+                            };
+
+                            if (!empty($data['date_from'])) {
+                                $timeFrom = $data['time_from'] ?? '00:00';
+                                $voteJoin->where('created_at', '>=', $data['date_from'] . ' ' . $timeFrom . ':00');
+                            }
+
+                            if (!empty($data['date_to'])) {
+                                $timeTo = $data['time_to'] ?? '23:59';
+                                $voteJoin->where('created_at', '<=', $data['date_to'] . ' ' . $timeTo . ':59');
+                            }
+
+                            // Aggregate in SQL — DISTINCT inside COUNT/SUM as a second
+                            // safety net in case any join path still produces duplicates.
+                            $voteAgg = Candidate::query()
+                                ->join('positions', 'candidates.position_id', '=', 'positions.id')
+                                ->leftJoinSub($voteJoin, 'votes', 'votes.candidate_id', '=', 'candidates.id')
+                                ->where('positions.is_active', true)
+                                ->select([
+                                    'positions.id as position_id',
+                                    'positions.title as position_title',
+                                    'positions.vacant_count',
+                                    'candidates.id as candidate_id',
+                                    'candidates.first_name',
+                                    'candidates.last_name',
+                                    DB::raw('COUNT(DISTINCT votes.id) as total'),
+                                    DB::raw('COUNT(DISTINCT CASE WHEN votes.online_vote = 1 THEN votes.id END) as online'),
+                                    DB::raw('COUNT(DISTINCT CASE WHEN votes.online_vote = 0 AND votes.id IS NOT NULL THEN votes.id END) as offline'),
+                                ])
+                                ->groupBy(
+                                    'positions.id', 'positions.title', 'positions.vacant_count',
+                                    'candidates.id', 'candidates.first_name', 'candidates.last_name'
+                                )
+                                ->get();
 
                             // Totals from the aggregate (no second query needed)
                             $totalVotes        = $voteAgg->sum('total');

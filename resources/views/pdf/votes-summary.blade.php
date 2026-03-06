@@ -45,12 +45,6 @@
             font-size: 16px;
             margin-top: 20px;
         }
-        .summary-table {
-            margin-top: 20px;
-        }
-        .summary-table td {
-            font-weight: bold;
-        }
         .vote-bar-wrap {
             background-color: #ecf0f1;
             border-radius: 4px;
@@ -105,6 +99,10 @@
             <td><strong>Vote Type:</strong> {{ $filters['vote_type_label'] ?? 'All Types' }}</td>
         </tr>
         <tr>
+            <td><strong>Validity:</strong> {{ $filters['is_valid_label'] ?? 'All Votes' }}</td>
+            <td><strong>Total Positions:</strong> {{ $summary->count() }}</td>
+        </tr>
+        <tr>
             <td>
                 <strong>Date &amp; Time From:</strong>
                 {{ $filters['date_from'] ?? 'Beginning' }}
@@ -113,29 +111,6 @@
                 <strong>Date &amp; Time To:</strong>
                 {{ $filters['date_to'] ?? 'Present' }}
             </td>
-        </tr>
-        <tr>
-            <td colspan="2"><strong>Total Positions:</strong> {{ $summary->count() }}</td>
-        </tr>
-    </table>
-
-    <h2>Summary Statistics</h2>
-    <table class="summary-table">
-        <tr>
-            <td>Total Votes Cast</td>
-            <td>{{ $totalVotes }}</td>
-        </tr>
-        <tr>
-            <td>Total Candidates</td>
-            <td>{{ $totalCandidates }}</td>
-        </tr>
-        <tr>
-            <td>Online Votes</td>
-            <td>{{ $totalOnlineVotes }}</td>
-        </tr>
-        <tr>
-            <td>Offline Votes</td>
-            <td>{{ $totalOfflineVotes }}</td>
         </tr>
     </table>
 
@@ -168,26 +143,26 @@
                 </thead>
                 <tbody>
                     @foreach($positionData['candidates'] as $index => $candidate)
-                        <tr class="{{ $candidate['total'] === 0 ? 'no-vote-row' : '' }}">
+                        <tr class="{{ (int) $candidate['total'] === 0 ? 'no-vote-row' : '' }}">
                             <td>{{ $index + 1 }}</td>
                             <td>
                                 {{ $candidate['name'] }}
-                                @if($index === 0 && $candidate['total'] > 0)
+                                @if($index === 0 && (int) $candidate['total'] > 0)
                                     <span class="leading-badge">Leading</span>
                                 @endif
                             </td>
                             <td>
-                                @if($candidate['total'] > 0)
+                                @if((int) $candidate['total'] > 0)
                                     {{ $candidate['total'] }} ({{ $candidate['percentage'] }}%)
                                 @else
                                     <span class="zero-votes">No votes yet</span>
                                 @endif
                             </td>
                             <td>
-                                @if($candidate['total'] > 0)
+                                @if((int) $candidate['total'] > 0)
                                     Online: {{ $candidate['online'] }} | Offline: {{ $candidate['offline'] }}
                                 @else
-                                    <span class="zero-votes">—</span>
+                                    Online: 0 | Offline: 0
                                 @endif
                             </td>
                             <td>

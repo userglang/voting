@@ -3,7 +3,6 @@
 namespace App\Exports;
 
 use App\Models\Vote;
-use App\Models\Position;
 use Maatwebsite\Excel\Concerns\FromCollection;
 use Maatwebsite\Excel\Concerns\WithHeadings;
 use Maatwebsite\Excel\Concerns\WithStyles;
@@ -20,66 +19,73 @@ class VotesSummaryExport implements
     WithTitle,
     ShouldAutoSize
 {
-    protected $filters;
-
-    public function __construct(array $filters = [])
-    {
-        $this->filters = $filters;
-    }
+    public function __construct(protected array $filters = []) {}
 
     public function collection()
     {
-        $query = Vote::query()
-            ->with(['candidate.position', 'branch']);
+        $votes = Vote::query()
+            ->select('votes.*')           // explicit select prevents ambiguous columns
+            ->distinct()                  // deduplicate rows inflated by any joins
+            ->with([
+                'candidate:id,position_id,first_name,last_name',
+                'candidate.position:id,title',
+            ])
+            ->when(
+                !empty($this->filters['branch_number']),
+                fn ($q) => $q->where('branch_number', $this->filters['branch_number'])
+            )
+            ->when(
+                ($this->filters['vote_type'] ?? 'all') === 'online',
+                fn ($q) => $q->where('online_vote', true)
+            )
+            ->when(
+                ($this->filters['vote_type'] ?? 'all') === 'offline',
+                fn ($q) => $q->where('online_vote', false)
+            )
+            ->when(
+                ($this->filters['is_valid'] ?? 'all') === 'valid',
+                fn ($q) => $q->where('is_valid', true)
+            )
+            ->when(
+                ($this->filters['is_valid'] ?? 'all') === 'invalid',
+                fn ($q) => $q->where('is_valid', false)
+            )
+            ->when(
+                !empty($this->filters['date_from']),
+                fn ($q) => $q->where('created_at', '>=',
+                    $this->filters['date_from'] . ' ' . ($this->filters['time_from'] ?? '00:00') . ':00'
+                )
+            )
+            ->when(
+                !empty($this->filters['date_to']),
+                fn ($q) => $q->where('created_at', '<=',
+                    $this->filters['date_to'] . ' ' . ($this->filters['time_to'] ?? '23:59') . ':59'
+                )
+            )
+            ->get();
 
-        if (!empty($this->filters['branch_number'])) {
-            $query->where('branch_number', $this->filters['branch_number']);
-        }
+        // Group by position → candidate, then flatten into a flat row collection.
+        // Because votes are already deduplicated above, counts here are accurate.
+        return $votes
+            ->filter(fn ($vote) => $vote->candidate?->position !== null) // skip orphaned votes
+            ->groupBy(fn ($vote) => $vote->candidate->position->title)
+            ->map(fn ($positionVotes) =>
+                $positionVotes
+                    ->groupBy('candidate_id')
+                    ->map(function ($candidateVotes) {
+                        $candidate = $candidateVotes->first()->candidate;
 
-        match ($this->filters['vote_type'] ?? 'all') {
-            'online'  => $query->where('online_vote', true),
-            'offline' => $query->where('online_vote', false),
-            default   => null,
-        };
-
-        // is_valid = valid   → valid votes only
-        // is_valid = invalid → invalid votes only
-        // is_valid = all     → no filter
-        match ($this->filters['is_valid'] ?? 'all') {
-            'valid'   => $query->where('is_valid', true),
-            'invalid' => $query->where('is_valid', false),
-            default   => null,
-        };
-
-        if (!empty($this->filters['date_from'])) {
-            $timeFrom = $this->filters['time_from'] ?? '00:00';
-            $query->where('created_at', '>=', $this->filters['date_from'] . ' ' . $timeFrom . ':00');
-        }
-
-        if (!empty($this->filters['date_to'])) {
-            $timeTo = $this->filters['time_to'] ?? '23:59';
-            $query->where('created_at', '<=', $this->filters['date_to'] . ' ' . $timeTo . ':59');
-        }
-
-        $votes = $query->get();
-
-        $summary = $votes->groupBy(function ($vote) {
-            return $vote->candidate->position->title;
-        })->map(function ($positionVotes) {
-            return $positionVotes->groupBy('candidate_id')->map(function ($candidateVotes) {
-                $candidate = $candidateVotes->first()->candidate;
-
-                return [
-                    'position'      => $candidate->position->title,
-                    'candidate'     => $candidate->full_name,
-                    'total_votes'   => $candidateVotes->count(),
-                    'online_votes'  => $candidateVotes->where('online_vote', true)->count(),
-                    'offline_votes' => $candidateVotes->where('online_vote', false)->count(),
-                ];
-            })->values();
-        })->flatten(1);
-
-        return $summary;
+                        return [
+                            'position'      => $candidate->position->title,
+                            'candidate'     => trim("{$candidate->first_name} {$candidate->last_name}"),
+                            'total_votes'   => $candidateVotes->count(),
+                            'online_votes'  => $candidateVotes->where('online_vote', true)->count(),
+                            'offline_votes' => $candidateVotes->where('online_vote', false)->count(),
+                        ];
+                    })
+                    ->values()
+            )
+            ->flatten(1);
     }
 
     public function headings(): array
@@ -93,7 +99,7 @@ class VotesSummaryExport implements
         ];
     }
 
-    public function styles(Worksheet $sheet)
+    public function styles(Worksheet $sheet): array
     {
         return [
             1 => [

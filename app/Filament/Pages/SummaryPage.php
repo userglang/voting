@@ -40,14 +40,8 @@ class SummaryPage extends Page implements HasTable
     protected static string|UnitEnum|null $navigationGroup = 'Reports';
     protected static ?int $navigationSort = 3;
 
-    /**
-     * Cache TTL in seconds.
-     */
     protected int $cacheTtl = 300;
 
-    /**
-     * Return branch options for export forms, cached to avoid repeated queries.
-     */
     protected function branchOptions(): array
     {
         return Cache::remember('branch_options', $this->cacheTtl, fn () =>
@@ -55,10 +49,6 @@ class SummaryPage extends Page implements HasTable
         );
     }
 
-    /**
-     * Shared export filter form schema (reused across all export actions).
-     * Accepts which optional fields to include.
-     */
     protected function exportFormSchema(bool $withStatus = false, bool $withMigs = false, bool $withRegistration = false, bool $withGender = false, bool $withValid = false): array
     {
         $fields = [
@@ -127,9 +117,6 @@ class SummaryPage extends Page implements HasTable
         return $fields;
     }
 
-    /**
-     * Build a filtered Member query from export form data.
-     */
     protected function buildMemberQuery(array $data, bool $withBranch = false): Builder
     {
         $query = Member::query();
@@ -149,8 +136,8 @@ class SummaryPage extends Page implements HasTable
         };
 
         match ($data['is_migs'] ?? 'all') {
-            'yes' => $query->where('is_migs', true),
-            'no'  => $query->where('is_migs', false),
+            'yes'   => $query->where('is_migs', true),
+            'no'    => $query->where('is_migs', false),
             default => null,
         };
 
@@ -239,19 +226,10 @@ class SummaryPage extends Page implements HasTable
 
                             $branchNumbers = $branches->pluck('branch_number');
 
-                            $memberQuery = Member::whereIn('branch_number', $branchNumbers);
-
-                            // Apply is_valid filter to the PDF summary member stats query
-                            // match ($data['is_valid'] ?? 'all') {
-                            //     'valid'   => $memberQuery->where('is_valid', true),
-                            //     'invalid' => $memberQuery->where('is_valid', false),
-                            //     default   => null,
-                            // };
-
-                            $memberStats = $memberQuery
+                            $memberStats = Member::whereIn('branch_number', $branchNumbers)
                                 ->select([
                                     'branch_number',
-                                    DB::raw('COUNT(*) as total_members'),
+                                    DB::raw('COUNT(DISTINCT id) as total_members'),
                                     DB::raw('SUM(CASE WHEN is_migs = 1 THEN 1 ELSE 0 END) as total_migs'),
                                     DB::raw('SUM(CASE WHEN is_migs = 0 THEN 1 ELSE 0 END) as total_non_migs'),
                                     DB::raw('SUM(CASE WHEN is_migs = 1 AND is_registered = 1 THEN 1 ELSE 0 END) as total_reg_migs'),
@@ -269,8 +247,10 @@ class SummaryPage extends Page implements HasTable
                                 default   => null,
                             };
 
+                            // COUNT(DISTINCT id) prevents duplicate vote rows from
+                            // inflating the per-branch cast count
                             $voteCounts = $voteQuery
-                                ->select('branch_number', DB::raw('COUNT(*) as total_casted_votes'))
+                                ->select('branch_number', DB::raw('COUNT(DISTINCT id) as total_casted_votes'))
                                 ->groupBy('branch_number')
                                 ->pluck('total_casted_votes', 'branch_number');
 
@@ -287,7 +267,9 @@ class SummaryPage extends Page implements HasTable
                                     'total_non_migs'     => (int) ($stats->total_non_migs ?? 0),
                                     'total_reg_migs'     => $totalRegMigs,
                                     'total_reg_non_migs' => (int) ($stats->total_reg_non_migs ?? 0),
-                                    'quorum_percentage'  => $totalMigs > 0 ? round(($totalRegMigs / $totalMigs) * 100, 2) : 0.0,
+                                    'quorum_percentage'  => $totalMigs > 0
+                                        ? round(($totalRegMigs / $totalMigs) * 100, 2)
+                                        : 0.0,
                                     'total_casted_votes' => (int) ($voteCounts[$branch->branch_number] ?? 0),
                                 ];
                             });
@@ -305,7 +287,9 @@ class SummaryPage extends Page implements HasTable
                                 'totalRegNonMigs' => $summary->sum('total_reg_non_migs'),
                                 'totalRegistered' => $summary->sum('total_reg_migs') + $summary->sum('total_reg_non_migs'),
                                 'totalVotes'      => $summary->sum('total_casted_votes'),
-                                'overallQuorum'   => $totalMigs > 0 ? round(($totalRegMigs / $totalMigs) * 100, 2) : 0.0,
+                                'overallQuorum'   => $totalMigs > 0
+                                    ? round(($totalRegMigs / $totalMigs) * 100, 2)
+                                    : 0.0,
                             ])->setPaper('a4', 'portrait');
 
                             return response()->streamDownload(
@@ -326,41 +310,36 @@ class SummaryPage extends Page implements HasTable
         ];
     }
 
-    /**
-     * Compute member statistics from an already-loaded collection.
-     * Avoids extra DB queries after an eager-loaded fetch.
-     */
     protected function computeMemberStats(Collection $members): array
     {
         $totalMale   = $members->where('gender', 'Male')->count();
         $totalFemale = $members->where('gender', 'Female')->count();
-
-        $totalMigs    = $members->where('is_migs', true)->count();
-        $totalNonMigs = $members->where('is_migs', false)->count();
+        $totalMigs   = $members->where('is_migs', true)->count();
 
         return [
-            'totalMembers'       => $members->count(),
-            'totalMale'          => $totalMale,
-            'totalFemale'        => $totalFemale,
-            'registeredMale'     => $members->where('gender', 'Male')->where('is_registered', true)->count(),
-            'registeredFemale'   => $members->where('gender', 'Female')->where('is_registered', true)->count(),
-            'totalMigs'          => $totalMigs,
-            'totalNonMigs'       => $totalNonMigs,
-            'registeredMigs'     => $members->where('is_migs', true)->where('is_registered', true)->count(),
-            'registeredNonMigs'  => $members->where('is_migs', false)->where('is_registered', true)->count(),
+            'totalMembers'      => $members->count(),
+            'totalMale'         => $totalMale,
+            'totalFemale'       => $totalFemale,
+            'registeredMale'    => $members->where('gender', 'Male')->where('is_registered', true)->count(),
+            'registeredFemale'  => $members->where('gender', 'Female')->where('is_registered', true)->count(),
+            'totalMigs'         => $totalMigs,
+            'totalNonMigs'      => $members->where('is_migs', false)->count(),
+            'registeredMigs'    => $members->where('is_migs', true)->where('is_registered', true)->count(),
+            'registeredNonMigs' => $members->where('is_migs', false)->where('is_registered', true)->count(),
         ];
     }
 
     /**
-     * Overall summary statistics — two DB queries total, cached.
+     * Overall summary statistics.
+     * Uses COUNT(DISTINCT id) on votes to prevent duplicate rows from
+     * inflating total_casted_votes and total_voters.
      */
     public function getOverallSummaryProperty(): array
     {
         return Cache::remember('overall_summary', $this->cacheTtl, function () {
-            // Single query for all member stats
             $memberStats = Member::where('is_active', true)
                 ->select([
-                    DB::raw('COUNT(*) as total_members'),
+                    DB::raw('COUNT(DISTINCT id) as total_members'),
                     DB::raw('SUM(CASE WHEN is_migs = 1 THEN 1 ELSE 0 END) as total_migs'),
                     DB::raw('SUM(CASE WHEN is_migs = 0 THEN 1 ELSE 0 END) as total_non_migs'),
                     DB::raw('SUM(CASE WHEN is_migs = 1 AND is_registered = 1 THEN 1 ELSE 0 END) as total_registered_migs'),
@@ -368,49 +347,47 @@ class SummaryPage extends Page implements HasTable
                 ])
                 ->first();
 
-            $totalMigs           = (int) $memberStats->total_migs;
-            $totalRegisteredMigs = (int) $memberStats->total_registered_migs;
+            $totalMigs              = (int) $memberStats->total_migs;
+            $totalRegisteredMigs    = (int) $memberStats->total_registered_migs;
             $totalRegisteredNonMigs = (int) $memberStats->total_registered_non_migs;
 
-            // Single query for vote stats
-            $voteStats = Vote::select([
-                DB::raw('COUNT(*) as total_casted_votes'),
-                DB::raw('COUNT(DISTINCT member_code) as total_voters'),
-            ])->first();
+            $voteStats = Vote::where('is_valid', true)
+                ->select([
+                    DB::raw('COUNT(DISTINCT id) as total_casted_votes'),
+                    DB::raw('COUNT(DISTINCT member_code) as total_voters'),
+                ])
+                ->first();
 
             return [
-                'total_members'              => (int) $memberStats->total_members,
-                'total_migs'                 => $totalMigs,
-                'total_non_migs'             => (int) $memberStats->total_non_migs,
-                'total_registered_migs'      => $totalRegisteredMigs,
-                'total_registered_non_migs'  => $totalRegisteredNonMigs,
-                'total_registered'           => $totalRegisteredMigs + $totalRegisteredNonMigs,
-                'total_voters'               => (int) $voteStats->total_voters,
-                'quorum_percentage'          => $totalMigs > 0
+                'total_members'             => (int) $memberStats->total_members,
+                'total_migs'                => $totalMigs,
+                'total_non_migs'            => (int) $memberStats->total_non_migs,
+                'total_registered_migs'     => $totalRegisteredMigs,
+                'total_registered_non_migs' => $totalRegisteredNonMigs,
+                'total_registered'          => $totalRegisteredMigs + $totalRegisteredNonMigs,
+                'total_voters'              => (int) $voteStats->total_voters,
+                'quorum_percentage'         => $totalMigs > 0
                     ? round(($totalRegisteredMigs / $totalMigs) * 100, 2)
                     : 0.0,
-                'total_casted_votes'         => (int) $voteStats->total_casted_votes,
+                'total_casted_votes'        => (int) $voteStats->total_casted_votes,
             ];
         });
     }
 
     /**
      * Filament Table — branch breakdown.
-     *
-     * Key fix: use a subquery-based approach to avoid N+1.
-     * We join aggregated member and vote counts directly in the query,
-     * then use standard column accessors — no getStateUsing closures.
+     * Uses COUNT(DISTINCT id) in the votes subquery to prevent duplicate
+     * rows from join inflation before the table even renders.
      */
     public function table(Table $table): Table
     {
         return $table
             ->query(function (): Builder {
-                // Subquery: member aggregates per branch
                 $memberAgg = DB::table('members')
                     ->where('is_active', true)
                     ->select([
                         'branch_number',
-                        DB::raw('COUNT(*) as total_members'),
+                        DB::raw('COUNT(DISTINCT id) as total_members'),
                         DB::raw('SUM(CASE WHEN is_migs = 1 THEN 1 ELSE 0 END) as total_migs'),
                         DB::raw('SUM(CASE WHEN is_migs = 0 THEN 1 ELSE 0 END) as total_non_migs'),
                         DB::raw('SUM(CASE WHEN is_migs = 1 AND is_registered = 1 THEN 1 ELSE 0 END) as registered_migs'),
@@ -419,11 +396,13 @@ class SummaryPage extends Page implements HasTable
                     ])
                     ->groupBy('branch_number');
 
-                // Subquery: vote counts per branch
+                // COUNT(DISTINCT id) in the subquery — deduplicates before the
+                // leftJoinSub so branch-level vote counts are always accurate
                 $voteAgg = DB::table('votes')
+                    ->where('is_valid', true)
                     ->select([
                         'branch_number',
-                        DB::raw('COUNT(*) as votes_cast'),
+                        DB::raw('COUNT(DISTINCT id) as votes_cast'),
                     ])
                     ->groupBy('branch_number');
 
@@ -523,7 +502,6 @@ class SummaryPage extends Page implements HasTable
                     ->searchable()
                     ->preload(),
 
-                // Quorum threshold filter — now works because quorum_percentage is a real column
                 SelectFilter::make('quorum_threshold')
                     ->label('Quorum Status')
                     ->options([
@@ -532,29 +510,24 @@ class SummaryPage extends Page implements HasTable
                         'above_25' => '25–50% (Fair)',
                         'below_25' => 'Below 25% (Poor)',
                     ])
-                    ->query(function (Builder $query, array $data): Builder {
-                        return match ($data['value'] ?? null) {
-                            'above_75' => $query->where('quorum_percentage', '>=', 75),
-                            'above_50' => $query->whereBetween('quorum_percentage', [50, 74.99]),
-                            'above_25' => $query->whereBetween('quorum_percentage', [25, 49.99]),
-                            'below_25' => $query->where('quorum_percentage', '<', 25),
-                            default    => $query,
-                        };
+                    ->query(fn (Builder $query, array $data): Builder => match ($data['value'] ?? null) {
+                        'above_75' => $query->where('quorum_percentage', '>=', 75),
+                        'above_50' => $query->whereBetween('quorum_percentage', [50, 74.99]),
+                        'above_25' => $query->whereBetween('quorum_percentage', [25, 49.99]),
+                        'below_25' => $query->where('quorum_percentage', '<', 25),
+                        default    => $query,
                     }),
 
-                // Votes filter — works because votes_cast is a real column
                 SelectFilter::make('has_votes')
                     ->label('Votes Cast')
                     ->options([
                         'yes' => 'With votes',
                         'no'  => 'Without votes',
                     ])
-                    ->query(function (Builder $query, array $data): Builder {
-                        return match ($data['value'] ?? null) {
-                            'yes'   => $query->where('votes_cast', '>', 0),
-                            'no'    => $query->where('votes_cast', '=', 0),
-                            default => $query,
-                        };
+                    ->query(fn (Builder $query, array $data): Builder => match ($data['value'] ?? null) {
+                        'yes'   => $query->where('votes_cast', '>', 0),
+                        'no'    => $query->where('votes_cast', '=', 0),
+                        default => $query,
                     }),
 
             ])

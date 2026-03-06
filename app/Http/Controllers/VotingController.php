@@ -588,6 +588,7 @@ class VotingController extends Controller
         }
 
         if ($request->filled('birth_date') &&
+            $member->birth_date !== null &&
             $request->birth_date === $member->birth_date->format('Y-m-d')) {
             return true;
         }
