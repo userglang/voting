@@ -12,7 +12,7 @@
         }
         h1, h2, h3 {
             color: #2c3e50;
-            margin: 10px 0;
+            margin: 5px 0;
         }
         table {
             width: 100%;
@@ -92,7 +92,6 @@
         <span class="datetime-label">{{ now()->format('g:i A') }}</span>
     </p>
 
-    <h2>Filter Information</h2>
     <table>
         <tr>
             <td><strong>Branch:</strong> {{ $filters['branch_name'] ?? 'All Branches' }}</td>
@@ -122,14 +121,10 @@
         @foreach($summary as $positionData)
             <h3>
                 {{ $positionData['position_title'] }}
-                @if($positionData['vacant_count'] > 1)
+                @if($positionData['vacant_count'] > 0)
                     ({{ $positionData['vacant_count'] }} positions available)
                 @endif
             </h3>
-            <p>
-                Total Votes: {{ $positionData['total_votes'] }} |
-                Candidates: {{ count($positionData['candidates']) }}
-            </p>
 
             <table>
                 <thead>

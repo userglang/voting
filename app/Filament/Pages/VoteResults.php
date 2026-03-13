@@ -267,123 +267,132 @@ class VoteResults extends Page
                     }),
 
                 Action::make('exportPdfSummary')
-                    ->label('Export to PDF (Summary)')
-                    ->icon('heroicon-o-chart-bar-square')
-                    ->color('warning')
-                    ->form([
-                        Section::make('Export Filters')
-                            ->description('Filter the summary data')
-                            ->schema($this->voteExportSchema())
-                            ->columns(2),
-                    ])
-                    ->action(function (array $data) {
-                        try {
-                            // Build a deduplicated votes subquery with filters baked in,
-                            // so candidates with zero votes are still included (true LEFT JOIN)
-                            // and duplicate vote rows can never inflate the counts.
-                            $voteJoin = DB::table('votes')
-                                ->select('id', 'candidate_id', 'online_vote')  // only what the JOIN needs
-                                ->distinct();                                   // deduplicate before joining
+    ->label('Export to PDF (Summary)')
+    ->icon('heroicon-o-chart-bar-square')
+    ->color('warning')
+    ->form([
+        Section::make('Export Filters')
+            ->description('Filter the summary data')
+            ->schema($this->voteExportSchema())
+            ->columns(2),
+    ])
+    ->action(function (array $data) {
+        try {
+            // Build a deduplicated votes subquery with filters baked in
+            $voteJoin = DB::table('votes')
+                ->select('id', 'candidate_id', 'online_vote')
+                ->distinct();
 
-                            match ($data['is_valid'] ?? 'valid') {
-                                'valid'   => $voteJoin->where('is_valid', true),
-                                'invalid' => $voteJoin->where('is_valid', false),
-                                default   => null,
-                            };
+            match ($data['is_valid'] ?? 'valid') {
+                'valid'   => $voteJoin->where('is_valid', true),
+                'invalid' => $voteJoin->where('is_valid', false),
+                default   => null,
+            };
 
-                            if (!empty($data['branch_number'])) {
-                                $voteJoin->where('branch_number', $data['branch_number']);
-                            }
+            if (!empty($data['branch_number'])) {
+                $voteJoin->where('branch_number', $data['branch_number']);
+            }
 
-                            match ($data['vote_type'] ?? 'all') {
-                                'online'  => $voteJoin->where('online_vote', true),
-                                'offline' => $voteJoin->where('online_vote', false),
-                                default   => null,
-                            };
+            match ($data['vote_type'] ?? 'all') {
+                'online'  => $voteJoin->where('online_vote', true),
+                'offline' => $voteJoin->where('online_vote', false),
+                default   => null,
+            };
 
-                            if (!empty($data['date_from'])) {
-                                $timeFrom = $data['time_from'] ?? '00:00';
-                                $voteJoin->where('created_at', '>=', $data['date_from'] . ' ' . $timeFrom . ':00');
-                            }
+            if (!empty($data['date_from'])) {
+                $timeFrom = $data['time_from'] ?? '00:00';
+                $voteJoin->where('created_at', '>=', $data['date_from'] . ' ' . $timeFrom . ':00');
+            }
 
-                            if (!empty($data['date_to'])) {
-                                $timeTo = $data['time_to'] ?? '23:59';
-                                $voteJoin->where('created_at', '<=', $data['date_to'] . ' ' . $timeTo . ':59');
-                            }
+            if (!empty($data['date_to'])) {
+                $timeTo = $data['time_to'] ?? '23:59';
+                $voteJoin->where('created_at', '<=', $data['date_to'] . ' ' . $timeTo . ':59');
+            }
 
-                            // Aggregate in SQL — DISTINCT inside COUNT/SUM as a second
-                            // safety net in case any join path still produces duplicates.
-                            $voteAgg = Candidate::query()
-                                ->join('positions', 'candidates.position_id', '=', 'positions.id')
-                                ->leftJoinSub($voteJoin, 'votes', 'votes.candidate_id', '=', 'candidates.id')
-                                ->where('positions.is_active', true)
-                                ->select([
-                                    'positions.id as position_id',
-                                    'positions.title as position_title',
-                                    'positions.vacant_count',
-                                    'candidates.id as candidate_id',
-                                    'candidates.first_name',
-                                    'candidates.last_name',
-                                    DB::raw('COUNT(DISTINCT votes.id) as total'),
-                                    DB::raw('COUNT(DISTINCT CASE WHEN votes.online_vote = 1 THEN votes.id END) as online'),
-                                    DB::raw('COUNT(DISTINCT CASE WHEN votes.online_vote = 0 AND votes.id IS NOT NULL THEN votes.id END) as offline'),
-                                ])
-                                ->groupBy(
-                                    'positions.id', 'positions.title', 'positions.vacant_count',
-                                    'candidates.id', 'candidates.first_name', 'candidates.last_name'
-                                )
-                                ->get();
+            // Aggregate votes
+            $voteAgg = Candidate::query()
+                ->join('positions', 'candidates.position_id', '=', 'positions.id')
+                ->leftJoinSub($voteJoin, 'votes', 'votes.candidate_id', '=', 'candidates.id')
+                ->where('positions.is_active', true)
+                ->select([
+                    'positions.id as position_id',
+                    'positions.title as position_title',
+                    'positions.priority',
+                    'positions.vacant_count',
+                    'candidates.id as candidate_id',
+                    'candidates.first_name',
+                    'candidates.last_name',
+                    DB::raw('COUNT(DISTINCT votes.id) as total'),
+                    DB::raw('COUNT(DISTINCT CASE WHEN votes.online_vote = 1 THEN votes.id END) as online'),
+                    DB::raw('COUNT(DISTINCT CASE WHEN votes.online_vote = 0 AND votes.id IS NOT NULL THEN votes.id END) as offline'),
+                ])
+                ->groupBy(
+                    'positions.id',
+                    'positions.title',
+                    'positions.priority',
+                    'positions.vacant_count',
+                    'candidates.id',
+                    'candidates.first_name',
+                    'candidates.last_name'
+                )
+                ->get();
 
-                            // Totals from the aggregate (no second query needed)
-                            $totalVotes        = $voteAgg->sum('total');
-                            $totalOnlineVotes  = $voteAgg->sum('online');
-                            $totalOfflineVotes = $voteAgg->sum('offline');
-                            $totalCandidates   = $voteAgg->unique('candidate_id')->count();
+            // Totals
+            $totalVotes        = $voteAgg->sum('total');
+            $totalOnlineVotes  = $voteAgg->sum('online');
+            $totalOfflineVotes = $voteAgg->sum('offline');
+            $totalCandidates   = $voteAgg->unique('candidate_id')->count();
 
-                            // Group into positions → candidates structure
-                            $summary = $voteAgg
-                                ->groupBy('position_id')
-                                ->map(function (Collection $rows) {
-                                    $first              = $rows->first();
-                                    $totalPositionVotes = $rows->sum('total');
+            // Build grouped summary
+            $summary = $voteAgg
+                ->groupBy('position_id')
+                ->map(function (Collection $rows) {
+                    $first = $rows->first();
+                    $totalPositionVotes = $rows->sum('total');
 
-                                    $candidates = $rows->map(fn ($row) => [
-                                        'name'       => trim("{$row->first_name} {$row->last_name}"),
-                                        'total'      => (int) $row->total,
-                                        'online'     => (int) $row->online,
-                                        'offline'    => (int) $row->offline,
-                                        'percentage' => $totalPositionVotes > 0
-                                            ? round(($row->total / $totalPositionVotes) * 100, 2)
-                                            : 0.0,
-                                    ])->sortByDesc('total')->values();
+                    $candidates = $rows->map(fn ($row) => [
+                        'name'       => trim("{$row->first_name} {$row->last_name}"),
+                        'total'      => (int) $row->total,
+                        'online'     => (int) $row->online,
+                        'offline'    => (int) $row->offline,
+                        'percentage' => $totalPositionVotes > 0
+                            ? round(($row->total / $totalPositionVotes) * 100, 2)
+                            : 0.0,
+                    ])->sortByDesc('total')->values();
 
-                                    return [
-                                        'position_title' => $first->position_title,
-                                        'vacant_count'   => $first->vacant_count,
-                                        'total_votes'    => $totalPositionVotes,
-                                        'candidates'     => $candidates,
-                                    ];
-                                })
-                                ->sortBy('position_title')
-                                ->values();
+                    return [
+                        'position_title' => $first->position_title,
+                        'priority'       => $first->priority,
+                        'vacant_count'   => $first->vacant_count,
+                        'total_votes'    => $totalPositionVotes,
+                        'candidates'     => $candidates,
+                    ];
+                })
+                ->sortBy('priority') // ORDER BY POSITION PRIORITY
+                ->values();
 
-                            $pdf = Pdf::loadView('pdf.votes-summary', [
-                                'summary'           => $summary,
-                                'filters'           => $this->buildFilterLabels($data),
-                                'totalVotes'        => $totalVotes,
-                                'totalOnlineVotes'  => $totalOnlineVotes,
-                                'totalOfflineVotes' => $totalOfflineVotes,
-                                'totalCandidates'   => $totalCandidates,
-                            ])->setPaper('a4', 'portrait');
+            $pdf = Pdf::loadView('pdf.votes-summary', [
+                'summary'           => $summary,
+                'filters'           => $this->buildFilterLabels($data),
+                'totalVotes'        => $totalVotes,
+                'totalOnlineVotes'  => $totalOnlineVotes,
+                'totalOfflineVotes' => $totalOfflineVotes,
+                'totalCandidates'   => $totalCandidates,
+            ])->setPaper('a4', 'portrait');
 
-                            return response()->streamDownload(
-                                fn () => print($pdf->output()),
-                                'votes-summary-' . now()->format('Y-m-d-His') . '.pdf'
-                            );
-                        } catch (\Exception $e) {
-                            Notification::make()->title('Export Failed')->body('Error: ' . $e->getMessage())->danger()->send();
-                        }
-                    }),
+            return response()->streamDownload(
+                fn () => print($pdf->output()),
+                'votes-summary-' . now()->format('Y-m-d-His') . '.pdf'
+            );
+
+        } catch (\Exception $e) {
+            Notification::make()
+                ->title('Export Failed')
+                ->body('Error: ' . $e->getMessage())
+                ->danger()
+                ->send();
+        }
+    }),
 
             ])
                 ->label('Vote Export Reports')
