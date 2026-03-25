@@ -112,6 +112,7 @@
             <th>MIGS Members</th>
             <th>Registered</th>
             <th>Votes Cast</th>
+            <th>Unique Voters</th>
             <th>Overall Quorum</th>
         </tr>
         <tr>
@@ -136,6 +137,10 @@
                 <div class="label">Votes</div>
             </td>
             <td>
+                <div class="number">{{ number_format($totalUniqueVoters) }}</div>
+                <div class="label">Voters</div>
+            </td>
+            <td>
                 <div class="number">{{ number_format($overallQuorum, 1) }}%</div>
                 <div class="label">Quorum</div>
             </td>
@@ -153,7 +158,8 @@
                 <th>Reg<br>MIGS</th>
                 <th>Reg<br>Non-MIGS</th>
                 <th>Quorum %</th>
-                <th>Votes</th>
+                <th>Votes<br>Cast</th>
+                <th>Unique<br>Voters</th>
             </tr>
         </thead>
         <tbody>
@@ -167,6 +173,7 @@
                 <td>{{ number_format($branch['total_reg_non_migs']) }}</td>
                 <td class="percentage">{{ number_format($branch['quorum_percentage'], 1) }}%</td>
                 <td>{{ number_format($branch['total_casted_votes']) }}</td>
+                <td>{{ number_format($branch['total_unique_voters']) }}</td>
             </tr>
             @endforeach
 
@@ -179,12 +186,13 @@
                 <td>{{ number_format($totalRegNonMigs) }}</td>
                 <td class="percentage">{{ number_format($overallQuorum, 1) }}%</td>
                 <td>{{ number_format($totalVotes) }}</td>
+                <td>{{ number_format($totalUniqueVoters) }}</td>
             </tr>
         </tbody>
     </table>
 
     <div class="footer">
-        <p>Summary: {{ number_format($totalBranches) }} branches • {{ number_format($totalMembers) }} members • {{ number_format($totalVotes) }} votes • {{ number_format($overallQuorum, 1) }}% quorum</p>
+        <p>Summary: {{ number_format($totalBranches) }} branches • {{ number_format($totalMembers) }} members • {{ number_format($totalVotes) }} votes • {{ number_format($totalUniqueVoters) }} unique voters • {{ number_format($overallQuorum, 1) }}% quorum</p>
         <p>Quorum: (Registered MIGS / Total MIGS) × 100</p>
         <p>© {{ now()->year }} Member Management System</p>
     </div>
